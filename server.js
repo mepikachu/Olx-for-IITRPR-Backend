@@ -32,11 +32,14 @@ app.post("/api/login", async (req, res) => {
   try {
     const user = await User.findOne({ email, password });
     if (user) {
+      console.log("Login successful");
       res.json({ message: "Login successful", user });
     } else {
+      console.log("Invalid credentails");
       res.status(401).json({ error: "Invalid credentials" });
     }
   } catch (err) {
+    console.log("Server error");
     res.status(500).json({ error: "Server error" });
   }
 });
