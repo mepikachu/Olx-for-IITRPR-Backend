@@ -4,7 +4,6 @@ const cors = require("cors");
 const bodyParser = require("body-parser");
 
 const app = express();
-const PORT = 3000;
 
 // Middleware
 app.use(cors());
@@ -55,4 +54,8 @@ app.get("/api/users", async (req, res) => {
 });
 
 // Start the Server
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`Server running on port ${PORT}`);
+});
+
