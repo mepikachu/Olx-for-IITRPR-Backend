@@ -340,6 +340,7 @@ app.post('/api/register', upload.none(), async (req, res) => {
 app.post('/api/products', authenticate, upload.array('images', 5), async (req, res) => {
   try {
     console.log("Received product submission:", req.body);
+    console.log("File details:", req.files[0]);
 
     // Map uploaded files to an array of { data, contentType } objects
     const images = req.files.map(file => ({
