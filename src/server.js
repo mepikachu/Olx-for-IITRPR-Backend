@@ -10,10 +10,29 @@ require("dotenv").config();
 
 const app = express();
 
-// Middleware
-app.use(cors({credentials: true}));
+// Enhanced CORS configuration
+app.use(cors({
+  origin: process.env.CLIENT_URL || 'http://localhost:3000',
+  credentials: true
+}));
+
 app.use(bodyParser.json({ limit: '50mb' }));
 app.use(bodyParser.urlencoded({ extended: true, limit: '50mb' }));
+
+// Improved MongoDB connection handling
+const connectDB = async () => {
+  try {
+    await mongoose.connect(process.env.MONGO_URI, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true
+    });
+    console.log("MongoDB Connected");
+  } catch (err) {
+    console.error("MongoDB Connection Error:", err);
+    process.exit(1);
+  }
+};
+connectDB();
 
 // File upload setup
 const storage = multer.diskStorage({
@@ -26,11 +45,6 @@ const storage = multer.diskStorage({
 });
 
 const upload = multer({ storage: storage });
-
-// MongoDB Connection
-mongoose.connect(process.env.MONGO_URI)
-  .then(() => console.log("MongoDB Connected"))
-  .catch(err => console.error("MongoDB Connection Error:", err));
 
 // Schemas
 const AddressSchema = new mongoose.Schema({
@@ -144,19 +158,16 @@ const ProductSchema = new mongoose.Schema({
 const User = mongoose.model('User', UserSchema);
 const Product = mongoose.model('Product', ProductSchema);
 
-// Middleware
+// Improved authentication middleware
 const authenticate = async (req, res, next) => {
-  const token = req.cookies.authToken || req.headers.authorization?.split(' ')[1];
-  
-  if (!token) return res.status(401).json({ success: false, error: 'Unauthorized' });
-
   try {
+    const token = req.cookies.authToken || req.headers.authorization?.split(' ')[1];
+    if (!token) return res.status(401).json({ success: false, error: 'Unauthorized' });
+
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     const user = await User.findById(decoded.userId).select('-password');
     
-    if (!user) {
-      return res.status(401).json({ success: false, error: 'User not found' });
-    }
+    if (!user) return res.status(401).json({ success: false, error: 'User not found' });
 
     // Update last seen
     user.lastSeen = Date.now();
@@ -169,10 +180,93 @@ const authenticate = async (req, res, next) => {
   }
 };
 
-// Routes
+// Improved error handling middleware
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({ 
+    success: false, 
+    error: 'Internal Server Error',
+    message: err.message 
+  });
+});
+
+// Fixed login route
+app.post('/api/login', upload.none(), async (req, res) => {
+  try {
+    const { identifier, password } = req.body;
+
+    // Validate input
+    if (!identifier || !password) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Identifier and password are required' 
+      });
+    }
+
+    const user = await User.findOne({
+      $or: [{ email: identifier }, { userName: identifier }]
+    }).select('+password');
+
+    if (!user) {
+      return res.status(401).json({ 
+        success: false, 
+        error: 'Invalid credentials' 
+      });
+    }
+
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(401).json({ 
+        success: false, 
+        error: 'Invalid credentials' 
+      });
+    }
+
+    const token = jwt.sign(
+      { userId: user._id, role: user.role },
+      process.env.JWT_SECRET,
+      { expiresIn: '1h' }
+    );
+
+    res.cookie('authToken', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 3600000
+    });
+
+    res.json({
+      success: true,
+      user: {
+        id: user._id,
+        userName: user.userName,
+        email: user.email,
+        role: user.role
+      }
+    });
+
+  } catch (err) {
+    console.error('Login error:', err);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Server error',
+      message: err.message 
+    });
+  }
+});
+
+// Fixed registration route
 app.post('/api/register', upload.none(), async (req, res) => {
   try {
     const { userName, email, phone, password, address } = req.body;
+
+    // Validate input
+    if (!userName || !email || !phone || !password) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'All fields are required' 
+      });
+    }
 
     const newUser = new User({
       userName,
@@ -208,53 +302,28 @@ app.post('/api/register', upload.none(), async (req, res) => {
     });
 
   } catch (err) {
+    console.error('Registration error:', err);
+    
     if (err.code === 11000) {
       const field = Object.keys(err.keyPattern)[0];
-      res.status(400).json({ success: false, error: `${field} already exists` });
-    } else {
-      res.status(500).json({ success: false, error: 'Server error' });
+      return res.status(400).json({ 
+        success: false, 
+        error: `${field} already exists` 
+      });
     }
-  }
-});
-
-app.post('/api/login', upload.none(), async (req, res) => {
-  try {
-    const { identifier, password } = req.body;
-
-    const user = await User.findOne({
-      $or: [{ email: identifier }, { userName: identifier }]
-    }).select('+password');
-
-    if (!user || !(await bcrypt.compare(password, user.password))) {
-      return res.status(401).json({ success: false, error: 'Invalid credentials' });
+    
+    if (err.name === 'ValidationError') {
+      return res.status(400).json({ 
+        success: false, 
+        error: Object.values(err.errors).map(val => val.message) 
+      });
     }
 
-    const token = jwt.sign(
-      { userId: user._id, role: user.role },
-      process.env.JWT_SECRET,
-      { expiresIn: '1h' }
-    );
-
-    res.cookie('authToken', token, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'strict',
-      maxAge: 3600000
+    res.status(500).json({ 
+      success: false, 
+      error: 'Server error',
+      message: err.message 
     });
-
-    res.json({
-      success: true,
-      user: {
-        id: user._id,
-        userName: user.userName,
-        email: user.email,
-        role: user.role,
-        lastSeen: user.lastSeen
-      }
-    });
-
-  } catch (err) {
-    res.status(500).json({ success: false, error: 'Server error' });
   }
 });
 
