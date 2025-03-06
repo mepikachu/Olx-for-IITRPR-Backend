@@ -19,6 +19,10 @@ app.use(cors({
 app.use(bodyParser.json({ limit: '50mb' }));
 app.use(bodyParser.urlencoded({ extended: true, limit: '50mb' }));
 
+const multer = require("multer");
+const storage = multer.memoryStorage();
+const upload = multer({ storage: storage });
+
 // Connect to MongoDB Atlas
 const connectDB = async () => {
   try {
@@ -33,17 +37,6 @@ const connectDB = async () => {
   }
 };
 connectDB();
-
-// File upload setup with multer
-const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, 'uploads/');
-  },
-  filename: function (req, file, cb) {
-    cb(null, Date.now() + path.extname(file.originalname));
-  }
-});
-const upload = multer({ storage: storage });
 
 // Schemas
 const AddressSchema = new mongoose.Schema({
@@ -137,8 +130,8 @@ const ProductSchema = new mongoose.Schema({
     maxlength: 1000
   },
   images: [{
-    type: String,
-    required: true
+    data: Buffer,
+    contentType: String
   }],
   category: {
     type: String,
@@ -343,30 +336,32 @@ app.post('/api/register', upload.none(), async (req, res) => {
   }
 });
 
-// Protected route for product creation
+// Protected route for product creation using memory storage
 app.post('/api/products', authenticate, upload.array('images', 5), async (req, res) => {
   try {
-    // Log the incoming request body for debugging
     console.log("Received product submission:", req.body);
-    
-    // Map uploaded file paths
-    const images = req.files.map(file => `/uploads/${file.filename}`);
-    
+
+    // Map uploaded files to an array of { data, contentType } objects
+    const images = req.files.map(file => ({
+      data: file.buffer,
+      contentType: file.mimetype
+    }));
+
     // Ensure required fields are provided
     if (!req.body.name || !req.body.description || !req.body.price || !req.body.category) {
       return res.status(400).json({ success: false, error: 'Missing required fields' });
     }
-    
+
     // Parse and validate price
     const price = parseFloat(req.body.price);
     if (isNaN(price)) {
       return res.status(400).json({ success: false, error: 'Price must be a valid number' });
     }
-    
+
     const productData = {
       name: req.body.name,
       description: req.body.description,
-      images,
+      images: images, // Directly store the image buffers
       seller: req.user._id,
       price: price,
       category: req.body.category.toLowerCase()
