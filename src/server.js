@@ -372,6 +372,19 @@ app.post('/api/products', authenticate, upload.array('images', 5), async (req, r
   }
 });
 
+app.get('/api/products', async (req, res) => {
+  try {
+    const filter = {};
+    if (req.query.status) {
+      filter.status = req.query.status;
+    }
+    const products = await Product.find(filter).populate('seller', 'userName');
+    res.json({ success: true, products });
+  } catch (err) {
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+});
+
 // Get current user details
 app.get('/api/me', authenticate, async (req, res) => {
   try {
