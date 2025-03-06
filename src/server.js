@@ -346,29 +346,43 @@ app.post('/api/register', upload.none(), async (req, res) => {
 // Protected route for product creation
 app.post('/api/products', authenticate, upload.array('images', 5), async (req, res) => {
   try {
+    // Log the incoming request body for debugging
+    console.log("Received product submission:", req.body);
+    
+    // Map uploaded file paths
     const images = req.files.map(file => `/uploads/${file.filename}`);
     
+    // Ensure required fields are provided
+    if (!req.body.name || !req.body.description || !req.body.price || !req.body.category) {
+      return res.status(400).json({ success: false, error: 'Missing required fields' });
+    }
+    
+    // Parse and validate price
+    const price = parseFloat(req.body.price);
+    if (isNaN(price)) {
+      return res.status(400).json({ success: false, error: 'Price must be a valid number' });
+    }
+    
     const productData = {
-      ...req.body,
+      name: req.body.name,
+      description: req.body.description,
       images,
       seller: req.user._id,
-      price: parseFloat(req.body.price),
+      price: price,
       category: req.body.category.toLowerCase()
     };
 
     const newProduct = new Product(productData);
     await newProduct.save();
 
+    // Update seller's soldProducts array
     req.user.soldProducts.push(newProduct._id);
     await req.user.save();
 
-    res.status(201).json({
-      success: true,
-      product: newProduct
-    });
-
+    res.status(201).json({ success: true, product: newProduct });
   } catch (err) {
-    res.status(500).json({ success: false, error: 'Server error' });
+    console.error("Error in POST /api/products:", err);
+    res.status(500).json({ success: false, error: 'Server error', message: err.message });
   }
 });
 
@@ -379,9 +393,11 @@ app.get('/api/products', async (req, res) => {
       filter.status = req.query.status;
     }
     const products = await Product.find(filter).populate('seller', 'userName');
-    res.json({ success: true, products });
+    // Always return an array; even if it's empty.
+    res.json({ success: true, products: products || [] });
   } catch (err) {
-    res.status(500).json({ success: false, error: 'Server error' });
+    console.error(err);
+    res.status(500).json({ success: false, error: 'Server error', message: err.message });
   }
 });
 
