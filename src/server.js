@@ -387,9 +387,27 @@ app.get('/api/products', async (req, res) => {
     if (req.query.status) {
       filter.status = req.query.status;
     }
-    const products = await Product.find(filter).populate('seller', 'userName');
-    // Always return an array; even if it's empty.
-    res.json({ success: true, products: products || [] });
+
+    // Use .lean() so we can directly manipulate the returned plain objects
+    const products = await Product.find(filter)
+      .populate('seller', 'userName')
+      .lean();
+
+    // Convert each image buffer into an array of ints
+    products.forEach(product => {
+      if (Array.isArray(product.images)) {
+        product.images = product.images.map(img => {
+          // img.data is a Buffer in Node
+          // Convert it to an array of bytes
+          return {
+            data: Array.from(img.data),  // <-- convert Buffer -> Array
+            contentType: img.contentType
+          };
+        });
+      }
+    });
+
+    res.json({ success: true, products });
   } catch (err) {
     console.error(err);
     res.status(500).json({ success: false, error: 'Server error', message: err.message });
