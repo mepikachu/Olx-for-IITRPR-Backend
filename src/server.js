@@ -11,7 +11,7 @@ app.use(cors());
 app.use(bodyParser.json());
 
 // Connect to MongoDB Atlas
-const mongoURI = "mongodb+srv://admin-olx-for-iitrpr:A6cRX3doy0aFgqdV@olx-for-iitrpr.vuprw.mongodb.net/?retryWrites=true&w=majority&appName=Olx-for-IITRPR";
+const mongoURI = process.env.MONGO_URI;
 mongoose
   .connect(mongoURI)
   .then(() => console.log("Connected to MongoDB Atlas"))
