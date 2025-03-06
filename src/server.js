@@ -159,8 +159,38 @@ const ProductSchema = new mongoose.Schema({
   transactionDate: Date
 }, { timestamps: true });
 
+// Conversation Schema: Only two participants allowed
+const ConversationSchema = new mongoose.Schema({
+  participants: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'User',
+    required: true
+  }],
+  messages: [{
+    sender: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      required: true
+    },
+    text: {
+      type: String,
+      required: true
+    },
+    createdAt: {
+      type: Date,
+      default: Date.now
+    }
+  }]
+}, { timestamps: true });
+
+// Validator to ensure exactly two participants
+ConversationSchema.path('participants').validate(function (value) {
+  return value.length === 2;
+}, 'A conversation must have exactly two participants.');
+
 const User = mongoose.model('User', UserSchema);
 const Product = mongoose.model('Product', ProductSchema);
+const Conversation = mongoose.model('Conversation', ConversationSchema);
 
 // Authentication Middleware
 const authenticate = async (req, res, next) => {
@@ -420,6 +450,106 @@ app.get('/api/products', async (req, res) => {
     });
 
     res.json({ success: true, products });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, error: 'Server error', message: err.message });
+  }
+});
+
+// Create or retrieve a conversation between two users
+app.post('/api/conversations', authenticate, async (req, res) => {
+  try {
+    const { participantId } = req.body;
+    if (!participantId) {
+      return res.status(400).json({ success: false, error: 'participantId is required' });
+    }
+
+    // Ensure only two participants are involved
+    const participants = [req.user._id, participantId].sort();
+    
+    // Check if a conversation already exists
+    let conversation = await Conversation.findOne({
+      participants: { $all: participants }
+    }).populate('participants', 'userName');
+
+    if (!conversation) {
+      conversation = new Conversation({ participants });
+      await conversation.save();
+    }
+
+    res.json({ success: true, conversation });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, error: 'Server error', message: err.message });
+  }
+});
+
+// Get all conversations that include the authenticated user
+app.get('/api/conversations', authenticate, async (req, res) => {
+  try {
+    const conversations = await Conversation.find({
+      participants: req.user._id
+    })
+      .populate('participants', 'userName')
+      .populate('messages.sender', 'userName')
+      .lean();
+
+    res.json({ success: true, conversations });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, error: 'Server error', message: err.message });
+  }
+});
+
+// Get conversation details including messages by conversationId
+app.get('/api/conversations/:conversationId', authenticate, async (req, res) => {
+  try {
+    const conversation = await Conversation.findById(req.params.conversationId)
+      .populate('participants', 'userName')
+      .populate('messages.sender', 'userName');
+    
+    if (!conversation) {
+      return res.status(404).json({ success: false, error: 'Conversation not found' });
+    }
+    // Ensure the user is a participant
+    if (!conversation.participants.map(p => p._id.toString()).includes(req.user._id.toString())) {
+      return res.status(403).json({ success: false, error: 'Access denied' });
+    }
+    
+    res.json({ success: true, conversation });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, error: 'Server error', message: err.message });
+  }
+});
+
+// Send a message in a conversation.
+app.post('/api/conversations/:conversationId/messages', authenticate, async (req, res) => {
+  try {
+    const { text } = req.body;
+    if (!text) {
+      return res.status(400).json({ success: false, error: 'Message text is required' });
+    }
+    
+    const conversation = await Conversation.findById(req.params.conversationId);
+    if (!conversation) {
+      return res.status(404).json({ success: false, error: 'Conversation not found' });
+    }
+    // Ensure the user is a participant
+    if (!conversation.participants.map(p => p.toString()).includes(req.user._id.toString())) {
+      return res.status(403).json({ success: false, error: 'Access denied' });
+    }
+    
+    const message = {
+      sender: req.user._id,
+      text,
+      createdAt: new Date()
+    };
+    
+    conversation.messages.push(message);
+    await conversation.save();
+    
+    res.json({ success: true, message: 'Message sent', conversation });
   } catch (err) {
     console.error(err);
     res.status(500).json({ success: false, error: 'Server error', message: err.message });
