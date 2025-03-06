@@ -388,21 +388,33 @@ app.get('/api/products', async (req, res) => {
       filter.status = req.query.status;
     }
 
-    // Use .lean() so we can directly manipulate the returned plain objects
+    // Use lean() so that we work with plain JS objects
     const products = await Product.find(filter)
       .populate('seller', 'userName')
       .lean();
 
-    // Convert each image buffer into an array of ints
+    // Safely transform each product's images
     products.forEach(product => {
       if (Array.isArray(product.images)) {
         product.images = product.images.map(img => {
-          // img.data is a Buffer in Node
-          // Convert it to an array of bytes
-          return {
-            data: Array.from(img.data),  // <-- convert Buffer -> Array
-            contentType: img.contentType
-          };
+          if (img && img.data) {
+            try {
+              // If img.data is not already an array, convert it using Array.from
+              const dataArray = Array.isArray(img.data)
+                ? img.data
+                : Array.from(img.data);
+              return {
+                data: dataArray,
+                contentType: img.contentType
+              };
+            } catch (e) {
+              // If conversion fails, return empty array for data
+              return { data: [], contentType: img.contentType };
+            }
+          } else {
+            // If there's no data, return an empty array
+            return { data: [], contentType: null };
+          }
         });
       }
     });
