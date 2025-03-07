@@ -183,7 +183,7 @@ const ConversationSchema = new mongoose.Schema({
   }]
 }, { timestamps: true });
 
-// Validator to ensure exactly two participants
+ConversationSchema.index({ participants: 1 });
 ConversationSchema.path('participants').validate(function (value) {
   return value.length === 2;
 }, 'A conversation must have exactly two participants.');
