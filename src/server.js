@@ -419,31 +419,21 @@ app.get('/api/products', async (req, res) => {
     }
 
     // Use lean() so that we work with plain JS objects
-    const products = await Product.find(filter)
+    let products = await Product.find(filter)
       .populate('seller', 'userName')
       .lean();
 
-    // Safely transform each product's images
+    // Convert each image buffer to base64 string for safe transfer
     products.forEach(product => {
       if (Array.isArray(product.images)) {
         product.images = product.images.map(img => {
           if (img && img.data) {
-            try {
-              // If img.data is not already an array, convert it using Array.from
-              const dataArray = Array.isArray(img.data)
-                ? img.data
-                : Array.from(img.data);
-              return {
-                data: dataArray,
-                contentType: img.contentType
-              };
-            } catch (e) {
-              // If conversion fails, return empty array for data
-              return { data: [], contentType: img.contentType };
-            }
+            return {
+              data: img.data.toString('base64'),
+              contentType: img.contentType
+            };
           } else {
-            // If there's no data, return an empty array
-            return { data: [], contentType: null };
+            return { data: null, contentType: null };
           }
         });
       }
