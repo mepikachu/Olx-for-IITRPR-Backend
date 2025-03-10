@@ -629,6 +629,7 @@ app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on port ${PORT}`);
 });
 
+// Create or update an offer for a product
 app.post('/api/offers', authenticate, async (req, res) => {
   try {
     const { productId, offerPrice } = req.body;
@@ -636,24 +637,88 @@ app.post('/api/offers', authenticate, async (req, res) => {
       return res.status(400).json({ success: false, error: 'Product ID and offer price required' });
     }
     
-    // Example: update the product document by appending this offer.
-    // This assumes you have a Product model and an "offerRequests" field (an array).
     const product = await Product.findById(productId);
     if (!product) {
       return res.status(404).json({ success: false, error: 'Product not found' });
     }
     
-    const offerRequest = {
-      offerPrice,
-      buyer: req.user._id,
-      createdAt: new Date()
-    };
-    
-    product.offerRequests = product.offerRequests || [];
-    product.offerRequests.push(offerRequest);
+    // Check if an offer from this buyer already exists
+    const existingIndex = product.offerRequests.findIndex(offer => offer.buyer.toString() === req.user._id.toString());
+    if (existingIndex !== -1) {
+      // Update existing offer price and timestamp
+      product.offerRequests[existingIndex].offerPrice = offerPrice;
+      product.offerRequests[existingIndex].createdAt = new Date();
+    } else {
+      // Otherwise, create a new offer
+      const offerRequest = {
+        offerPrice,
+        buyer: req.user._id,
+        createdAt: new Date()
+      };
+      product.offerRequests = product.offerRequests || [];
+      product.offerRequests.push(offerRequest);
+    }
     await product.save();
+    res.json({ success: true, offerRequests: product.offerRequests });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+});
 
-    res.json({ success: true, offerRequest });
+// Endpoint to retrieve all offers for a product (for the seller)
+app.get('/api/products/:productId/offers', authenticate, async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.productId)
+      .populate('offerRequests.buyer', 'userName');
+    if (!product) {
+      return res.status(404).json({ success: false, error: 'Product not found' });
+    }
+    res.json({ success: true, offerRequests: product.offerRequests });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+});
+
+// Endpoints to accept or decline an offer
+app.post('/api/offers/:offerId/accept', authenticate, async (req, res) => {
+  try {
+    const { productId } = req.body;
+    if (!productId) {
+      return res.status(400).json({ success: false, error: 'Product ID required' });
+    }
+    // Only seller can accept an offer.
+    const product = await Product.findById(productId);
+    if (!product) return res.status(404).json({ success: false, error: 'Product not found' });
+    if (product.seller.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ success: false, error: 'Access denied' });
+    }
+    // Update product status and/or record accepted offer as needed.
+    // (This example simply returns success.)
+    res.json({ success: true, message: 'Offer accepted' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+});
+
+app.post('/api/offers/:offerId/decline', authenticate, async (req, res) => {
+  try {
+    const { productId } = req.body;
+    if (!productId) {
+      return res.status(400).json({ success: false, error: 'Product ID required' });
+    }
+    // Only seller can decline an offer.
+    const product = await Product.findById(productId);
+    if (!product) return res.status(404).json({ success: false, error: 'Product not found' });
+    if (product.seller.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ success: false, error: 'Access denied' });
+    }
+    // Remove the offer from offerRequests.
+    product.offerRequests = product.offerRequests.filter(offer => offer._id.toString() !== req.params.offerId);
+    await product.save();
+    res.json({ success: true, message: 'Offer declined' });
   } catch (err) {
     console.error(err);
     res.status(500).json({ success: false, error: 'Server error' });
