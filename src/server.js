@@ -369,7 +369,7 @@ app.post('/api/register', upload.none(), async (req, res) => {
 app.post('/api/products', authenticate, upload.array('images', 5), async (req, res) => {
   try {
     console.log("Received product submission:", req.body);
-    console.log("File details:", req.files[0]);
+    console.log("Files received:", req.files.length);
 
     // Map uploaded files to an array of { data, contentType } objects
     const images = req.files.map(file => ({
@@ -432,9 +432,8 @@ app.get('/api/products', async (req, res) => {
               data: img.data.toString('base64'),
               contentType: img.contentType
             };
-          } else {
-            return { data: null, contentType: null };
           }
+          return { data: null, contentType: null };
         });
       }
     });
