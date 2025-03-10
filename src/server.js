@@ -633,35 +633,38 @@ app.listen(PORT, '0.0.0.0', () => {
 app.post('/api/offers', authenticate, async (req, res) => {
   try {
     const { productId, offerPrice } = req.body;
-    if (!productId || !offerPrice) {
-      return res.status(400).json({ success: false, error: 'Product ID and offer price required' });
-    }
-    
     const product = await Product.findById(productId);
+    
     if (!product) {
       return res.status(404).json({ success: false, error: 'Product not found' });
     }
-    
-    // Check if an offer from this buyer already exists
-    const existingIndex = product.offerRequests.findIndex(offer => offer.buyer.toString() === req.user._id.toString());
+
+    // Check if user already has an offer
+    const existingIndex = product.offerRequests.findIndex(
+      offer => offer.buyer.toString() === req.user._id.toString()
+    );
+
     if (existingIndex !== -1) {
-      // Update existing offer price and timestamp
+      // Update existing offer
       product.offerRequests[existingIndex].offerPrice = offerPrice;
-      product.offerRequests[existingIndex].createdAt = new Date();
+      product.offerRequests[existingIndex].updatedAt = new Date();
     } else {
-      // Otherwise, create a new offer
-      const offerRequest = {
-        offerPrice,
+      // Create new offer
+      product.offerRequests.push({
         buyer: req.user._id,
-        createdAt: new Date()
-      };
-      product.offerRequests = product.offerRequests || [];
-      product.offerRequests.push(offerRequest);
+        offerPrice,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      });
     }
+
     await product.save();
-    res.json({ success: true, offerRequests: product.offerRequests });
+    res.json({ 
+      success: true,
+      hasOffer: true,
+      offerAmount: offerPrice
+    });
   } catch (err) {
-    console.error(err);
     res.status(500).json({ success: false, error: 'Server error' });
   }
 });
@@ -721,6 +724,29 @@ app.post('/api/offers/:offerId/decline', authenticate, async (req, res) => {
     res.json({ success: true, message: 'Offer declined' });
   } catch (err) {
     console.error(err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+});
+
+// Add this endpoint to check if current user has made an offer
+app.get('/api/products/:productId/check-offer', authenticate, async (req, res) => {
+  try {
+    const product = await Product.findById(req.params.productId);
+    if (!product) {
+      return res.status(404).json({ success: false, error: 'Product not found' });
+    }
+
+    // Check if user has already made an offer
+    const existingOffer = product.offerRequests.find(
+      offer => offer.buyer.toString() === req.user._id.toString()
+    );
+
+    res.json({
+      success: true,
+      hasOffer: !!existingOffer,
+      offerAmount: existingOffer ? existingOffer.offerPrice : null
+    });
+  } catch (err) {
     res.status(500).json({ success: false, error: 'Server error' });
   }
 });
