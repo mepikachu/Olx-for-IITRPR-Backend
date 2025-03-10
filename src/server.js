@@ -156,7 +156,18 @@ const ProductSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
   },
-  transactionDate: Date
+  transactionDate: Date,
+  offerRequests: [{
+    offerPrice: Number,
+    buyer: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    createdAt: {
+      type: Date,
+      default: Date.now
+    }
+  }]
 }, { timestamps: true });
 
 // Conversation Schema: Only two participants allowed
@@ -616,4 +627,35 @@ app.use((err, req, res, next) => {
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server running on port ${PORT}`);
+});
+
+app.post('/api/offers', authenticate, async (req, res) => {
+  try {
+    const { productId, offerPrice } = req.body;
+    if (!productId || !offerPrice) {
+      return res.status(400).json({ success: false, error: 'Product ID and offer price required' });
+    }
+    
+    // Example: update the product document by appending this offer.
+    // This assumes you have a Product model and an "offerRequests" field (an array).
+    const product = await Product.findById(productId);
+    if (!product) {
+      return res.status(404).json({ success: false, error: 'Product not found' });
+    }
+    
+    const offerRequest = {
+      offerPrice,
+      buyer: req.user._id,
+      createdAt: new Date()
+    };
+    
+    product.offerRequests = product.offerRequests || [];
+    product.offerRequests.push(offerRequest);
+    await product.save();
+
+    res.json({ success: true, offerRequest });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
 });
