@@ -422,37 +422,30 @@ app.post('/api/products', authenticate, upload.array('images', 5), async (req, r
   }
 });
 
-app.get('/api/products', async (req, res) => {
+app.get('/api/products', authenticate, async (req, res) => {
   try {
-    const filter = {};
-    if (req.query.status) {
-      filter.status = req.query.status;
-    }
+    const filter = {
+      status: req.query.status || 'available',
+      seller: { $ne: req.user._id } // Exclude products where user is seller
+    };
 
-    // Use lean() so that we work with plain JS objects
     let products = await Product.find(filter)
       .populate('seller', 'userName')
       .lean();
 
-    // Convert each image buffer to base64 string for safe transfer
-    products.forEach(product => {
-      if (Array.isArray(product.images)) {
-        product.images = product.images.map(img => {
-          if (img && img.data) {
-            return {
-              data: img.data.toString('base64'),
-              contentType: img.contentType
-            };
-          }
-          return { data: null, contentType: null };
-        });
-      }
-    });
+    // Convert image buffers to base64
+    products = products.map(product => ({
+      ...product,
+      images: product.images?.map(img => ({
+        data: img.data?.toString('base64'),
+        contentType: img.contentType
+      })) || []
+    }));
 
     res.json({ success: true, products });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ success: false, error: 'Server error', message: err.message });
+    res.status(500).json({ success: false, error: 'Server error' });
   }
 });
 
