@@ -448,24 +448,41 @@ app.get('/api/products', async (req, res) => {
 // Create or retrieve a conversation between two users
 app.post('/api/conversations', authenticate, async (req, res) => {
   try {
-    const { participantId } = req.body;
+    const { participantId, productPreview, firstMessage } = req.body;
     if (!participantId) {
       return res.status(400).json({ success: false, error: 'participantId is required' });
     }
-
-    // Ensure only two participants are involved
+    // Ensure two participants are involved.
     const participants = [req.user._id, participantId].sort();
-    
-    // Check if a conversation already exists
     let conversation = await Conversation.findOne({
       participants: { $all: participants }
-    }).populate('participants', 'userName');
-
+    });
+  
     if (!conversation) {
       conversation = new Conversation({ participants });
-      await conversation.save();
+      
+      // If product preview is provided, add a product reply message.
+      if (productPreview && firstMessage) {
+        const productReplyMessage = {
+          type: 'product_reply', // marker for client to render specially
+          productId: productPreview.productId,
+          productName: productPreview.productName,
+          price: productPreview.price,
+          image: productPreview.image,
+          createdAt: new Date(),
+        };
+        const userMessage = {
+          sender: req.user._id,
+          text: firstMessage,
+          createdAt: new Date()
+        };
+        conversation.messages.push(productReplyMessage);
+        conversation.messages.push(userMessage);
+      }
     }
-
+  
+    await conversation.save();
+  
     res.json({ success: true, conversation });
   } catch (err) {
     console.error(err);
