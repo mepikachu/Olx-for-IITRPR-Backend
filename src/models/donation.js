@@ -10,10 +10,15 @@ const DonationProductSchema = new mongoose.Schema({
     data: Buffer,
     contentType: String
   }],
-  collectedBy: { 
+  donatedBy: { 
     type: mongoose.Schema.Types.ObjectId, 
     ref: 'User', 
     required: true 
+  },
+  collectedBy: { 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: 'User', 
+    required: false 
   },
   donationDate: { 
     type: Date, 
