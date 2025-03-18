@@ -74,10 +74,18 @@ const UserSchema = new mongoose.Schema({
     required: true,
     select: false
   },
+  profilePicture: {
+    data: Buffer,
+    contentType: String
+  },
   role: {
     type: String,
     enum: ['admin', 'volunteer', 'user'],
     default: 'user'
+  },
+  volunteerApproved: {
+    type: Boolean,
+    default: false
   },
   address: AddressSchema,
   soldProducts: [{
@@ -256,7 +264,7 @@ app.post('/api/login', upload.none(), async (req, res) => {
             id: userByCookie._id,
             userName: userByCookie.userName,
             email: userByCookie.email,
-            role: userByCookie.role
+            role: userByCookie.role  // admin, volunteer, or user
           }
         });
       } else {
@@ -305,7 +313,7 @@ app.post('/api/login', upload.none(), async (req, res) => {
         id: user._id,
         userName: user.userName,
         email: user.email,
-        role: user.role
+        role: user.role  // admin, volunteer, or user
       }
     });
 
@@ -739,6 +747,51 @@ app.get('/api/products/:productId/check-offer', authenticate, async (req, res) =
       hasOffer: !!existingOffer,
       offerAmount: existingOffer ? existingOffer.offerPrice : null
     });
+  } catch (err) {
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+});
+
+// Endpoint for admin to get pending volunteer requests
+app.get('/api/volunteer-requests', authenticate, async (req, res) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ success: false, error: 'Unauthorized' });
+  }
+  try {
+    const requests = await User.find({ role: 'volunteer', volunteerApproved: false }).select('-password');
+    res.json({ success: true, requests });
+  } catch (err) {
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+});
+
+// Endpoint to approve a volunteer request
+app.post('/api/volunteer-requests/:userId/approve', authenticate, async (req, res) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ success: false, error: 'Unauthorized' });
+  }
+  try {
+    const user = await User.findById(req.params.userId);
+    if (!user || user.role !== 'volunteer') {
+      return res.status(404).json({ success: false, error: 'Volunteer not found' });
+    }
+    user.volunteerApproved = true;
+    await user.save();
+    res.json({ success: true, message: 'Volunteer approved' });
+  } catch (err) {
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+});
+
+// Endpoint to reject a volunteer request (optional)
+app.post('/api/volunteer-requests/:userId/reject', authenticate, async (req, res) => {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ success: false, error: 'Unauthorized' });
+  }
+  try {
+    // For rejection, you might delete the volunteer record or set a flag.
+    await User.findByIdAndDelete(req.params.userId);
+    res.json({ success: true, message: 'Volunteer request rejected and user removed' });
   } catch (err) {
     res.status(500).json({ success: false, error: 'Server error' });
   }
