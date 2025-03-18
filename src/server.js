@@ -865,3 +865,54 @@ app.post('/api/donations', authenticate, upload.array('images'), async (req, res
     res.status(500).json({ success: false, error: 'Server error', message: err.message });
   }
 });
+
+// Update product route
+app.put('/api/products/:productId', authenticate, async (req, res) => {
+  try {
+    const { productId } = req.params;
+    const { name, description } = req.body;
+
+    const product = await Product.findById(productId);
+    if (!product) {
+      return res.status(404).json({ success: false, error: 'Product not found' });
+    }
+
+    // Ensure the authenticated user is the seller
+    if (product.seller.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ success: false, error: 'Access denied' });
+    }
+
+    // Update product details
+    product.name = name || product.name;
+    product.description = description || product.description;
+    await product.save();
+
+    res.json({ success: true, message: 'Product updated', product });
+  } catch (err) {
+    console.error('Update product error:', err);
+    res.status(500).json({ success: false, error: 'Server error', message: err.message });
+  }
+});
+
+// Delete product route
+app.delete('/api/products/:productId', authenticate, async (req, res) => {
+  try {
+    const { productId } = req.params;
+
+    const product = await Product.findById(productId);
+    if (!product) {
+      return res.status(404).json({ success: false, error: 'Product not found' });
+    }
+
+    // Ensure the authenticated user is the seller
+    if (product.seller.toString() !== req.user._id.toString()) {
+      return res.status(403).json({ success: false, error: 'Access denied' });
+    }
+
+    await product.remove();
+    res.json({ success: true, message: 'Product deleted' });
+  } catch (err) {
+    console.error('Delete product error:', err);
+    res.status(500).json({ success: false, error: 'Server error', message: err.message });
+  }
+});
