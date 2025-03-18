@@ -81,12 +81,8 @@ const UserSchema = new mongoose.Schema({
   },
   role: {
     type: String,
-    enum: ['admin', 'volunteer', 'user'],
+    enum: ['admin', 'volunteer', 'volunteer_pending', 'user'],
     default: 'user'
-  },
-  volunteerApproved: {
-    type: Boolean,
-    default: false
   },
   address: AddressSchema,
   soldProducts: [{
@@ -208,9 +204,22 @@ ConversationSchema.path('participants').validate(function (value) {
   return value.length === 2;
 }, 'A conversation must have exactly two participants.');
 
+const DonationProductSchema = new mongoose.Schema({
+  name: { type: String, required: true },
+  description: String,
+  images: [{
+    data: Buffer,
+    contentType: String
+  }],
+  // The volunteer who collected this donation product
+  collectedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  donationDate: { type: Date, default: Date.now }
+});
+
 const User = mongoose.model('User', UserSchema);
 const Product = mongoose.model('Product', ProductSchema);
 const Conversation = mongoose.model('Conversation', ConversationSchema);
+const DonationProduct = mongoose.model('DonationProduct', DonationProductSchema);
 
 // Authentication Middleware
 const authenticate = async (req, res, next) => {
@@ -231,6 +240,17 @@ const authenticate = async (req, res, next) => {
     user.lastSeen = Date.now();
     await user.save();
     req.user = user;
+
+    // If user's role is volunteer_pending and they are trying to access an endpoint other than allowed ones,
+    // then deny access.
+    const allowedForPendingVolunteer = ['/api/me', '/api/logout'];
+    if (user.role === 'volunteer_pending' &&
+        !allowedForPendingVolunteer.some(path => req.originalUrl.startsWith(path))) {
+      return res.status(403).json({
+        success: false,
+        error: 'Volunteer approval pending. Access denied except for profile details.'
+      });
+    }
     next();
   } catch (err) {
     console.error('Authentication error:', err);
@@ -342,12 +362,10 @@ app.post('/api/register', upload.single('profilePicture'), async (req, res) => {
       phone,
       password,
       address: JSON.parse(address),
-      // If role is 'volunteer', mark volunteerApproved false for later admin approval.
-      role: role === 'volunteer' ? 'volunteer' : 'user',
-      volunteerApproved: role === 'volunteer' ? false : true
+      // If role is volunteer then store as volunteer_pending.
+      role: role === 'volunteer' ? 'volunteer_pending' : 'user'
     });
 
-    // If a profile picture was attached, store it.
     if (req.file) {
       newUser.profilePicture = {
         data: req.file.buffer,
@@ -357,7 +375,6 @@ app.post('/api/register', upload.single('profilePicture'), async (req, res) => {
 
     await newUser.save();
 
-    // Generate and store auth cookie
     const newAuthCookie = crypto.randomBytes(64).toString('hex');
     newUser.authCookie = newAuthCookie;
     newUser.authCookieCreated = new Date();
@@ -768,7 +785,7 @@ app.get('/api/volunteer-requests', authenticate, async (req, res) => {
     return res.status(403).json({ success: false, error: 'Unauthorized' });
   }
   try {
-    const requests = await User.find({ role: 'volunteer', volunteerApproved: false }).select('-password');
+    const requests = await User.find({ role: 'volunteer_pending' }).select('-password');
     res.json({ success: true, requests });
   } catch (err) {
     res.status(500).json({ success: false, error: 'Server error' });
@@ -782,10 +799,11 @@ app.post('/api/volunteer-requests/:userId/approve', authenticate, async (req, re
   }
   try {
     const user = await User.findById(req.params.userId);
-    if (!user || user.role !== 'volunteer') {
-      return res.status(404).json({ success: false, error: 'Volunteer not found' });
+    if (!user || user.role !== 'volunteer_pending') {
+      return res.status(404).json({ success: false, error: 'Volunteer not found or already approved' });
     }
-    user.volunteerApproved = true;
+    // Update role directly to approved volunteer
+    user.role = 'volunteer';
     await user.save();
     res.json({ success: true, message: 'Volunteer approved' });
   } catch (err) {
@@ -799,10 +817,51 @@ app.post('/api/volunteer-requests/:userId/reject', authenticate, async (req, res
     return res.status(403).json({ success: false, error: 'Unauthorized' });
   }
   try {
-    // For rejection, you might delete the volunteer record or set a flag.
     await User.findByIdAndDelete(req.params.userId);
     res.json({ success: true, message: 'Volunteer request rejected and user removed' });
   } catch (err) {
     res.status(500).json({ success: false, error: 'Server error' });
+  }
+});
+
+// Endpoint to get donation products for the current volunteer.
+app.get('/api/donations', authenticate, async (req, res) => {
+  try {
+    // Both approved and pending volunteers can view donations.
+    const donations = await DonationProduct.find({ collectedBy: req.user._id });
+    res.json({ success: true, donations });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+});
+
+// Endpoint to add a donation product (collected by the volunteer)
+app.post('/api/donations', authenticate, upload.array('images'), async (req, res) => {
+  try {
+    // Only approved volunteers can submit donation products.
+    if (req.user.role !== 'volunteer') {
+      return res.status(403).json({ success: false, error: 'Volunteer approval pending. Action not allowed.' });
+    }
+    const { name, description } = req.body;
+    if (!name) {
+      return res.status(400).json({ success: false, error: 'Name is required' });
+    }
+    const donation = new DonationProduct({
+      name,
+      description,
+      collectedBy: req.user._id,
+    });
+    if (req.files && req.files.length > 0) {
+      donation.images = req.files.map(file => ({
+        data: file.buffer,
+        contentType: file.mimetype
+      }));
+    }
+    await donation.save();
+    res.status(201).json({ success: true, donation });
+  } catch (err) {
+    console.error('Donation submission error:', err);
+    res.status(500).json({ success: false, error: 'Server error', message: err.message });
   }
 });
