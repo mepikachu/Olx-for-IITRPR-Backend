@@ -328,12 +328,11 @@ app.post('/api/login', upload.none(), async (req, res) => {
 });
 
 // Registration route (creates a user and optionally sets an auth cookie)
-app.post('/api/register', upload.none(), async (req, res) => {
+app.post('/api/register', upload.single('profilePicture'), async (req, res) => {
   try {
-    const { userName, email, phone, password, address } = req.body;
-
+    const { userName, email, phone, password, address, role } = req.body;
     if (!userName || !email || !phone || !password) {
-      return res.status(400).json({ success: false, error: 'All fields are required' });
+      return res.status(400).json({ success: false, error: 'All required fields missing' });
     }
 
     const newUser = new User({
@@ -341,12 +340,23 @@ app.post('/api/register', upload.none(), async (req, res) => {
       email,
       phone,
       password,
-      address: JSON.parse(address)
+      address: JSON.parse(address),
+      // If role is 'volunteer', mark volunteerApproved false for later admin approval.
+      role: role === 'volunteer' ? 'volunteer' : 'user',
+      volunteerApproved: role === 'volunteer' ? false : true
     });
+
+    // If a profile picture was attached, store it.
+    if (req.file) {
+      newUser.profilePicture = {
+        data: req.file.buffer,
+        contentType: req.file.mimetype
+      };
+    }
 
     await newUser.save();
 
-    // Optionally generate an auth cookie on registration
+    // Generate and store auth cookie
     const newAuthCookie = crypto.randomBytes(64).toString('hex');
     newUser.authCookie = newAuthCookie;
     newUser.authCookieCreated = new Date();
@@ -359,8 +369,8 @@ app.post('/api/register', upload.none(), async (req, res) => {
       sameSite: 'strict',
       maxAge: 30 * 24 * 60 * 60 * 1000
     });
-
-    res.status(201).json({
+    
+    return res.status(201).json({
       success: true,
       user: {
         id: newUser._id,
@@ -370,7 +380,6 @@ app.post('/api/register', upload.none(), async (req, res) => {
       },
       authCookie: newAuthCookie
     });
-
   } catch (err) {
     console.error('Registration error:', err);
     if (err.code === 11000) {
