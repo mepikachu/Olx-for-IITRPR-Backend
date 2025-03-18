@@ -883,11 +883,17 @@ app.put('/api/products/:productId', authenticate, async (req, res) => {
     }
 
     // Update product details
-    product.name = name || product.name;
-    product.description = description || product.description;
-    await product.save();
+    const updatedProduct = await Product.findByIdAndUpdate(
+      productId,
+      { name, description },
+      { new: true }
+    );
 
-    res.json({ success: true, message: 'Product updated', product });
+    res.json({ 
+      success: true, 
+      message: 'Product updated successfully', 
+      product: updatedProduct 
+    });
   } catch (err) {
     console.error('Update product error:', err);
     res.status(500).json({ success: false, error: 'Server error', message: err.message });
@@ -909,8 +915,15 @@ app.delete('/api/products/:productId', authenticate, async (req, res) => {
       return res.status(403).json({ success: false, error: 'Access denied' });
     }
 
-    await product.remove();
-    res.json({ success: true, message: 'Product deleted' });
+    // Use findByIdAndDelete instead of remove()
+    await Product.findByIdAndDelete(productId);
+
+    // Also remove the product reference from the user's soldProducts array
+    await User.findByIdAndUpdate(req.user._id, {
+      $pull: { soldProducts: productId }
+    });
+
+    res.json({ success: true, message: 'Product deleted successfully' });
   } catch (err) {
     console.error('Delete product error:', err);
     res.status(500).json({ success: false, error: 'Server error', message: err.message });
