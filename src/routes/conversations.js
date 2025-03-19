@@ -123,6 +123,7 @@ router.post('/:conversationId/messages', authenticate, async (req, res) => {
       replyToMessageId: createdMessage.replyToMessageId,
       createdAt: createdMessage.createdAt
     };
+    console.log(createdMessage.replyToMessageId);
     
     // Return success with both the temp ID and the created message
     res.json({ 
