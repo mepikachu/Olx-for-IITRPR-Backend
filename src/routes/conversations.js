@@ -86,9 +86,10 @@ router.get('/:conversationId', authenticate, async (req, res) => {
 });
 
 // Send message in conversation
+// Send message in conversation
 router.post('/:conversationId/messages', authenticate, async (req, res) => {
   try {
-    const { text, replyToMessageId } = req.body;
+    const { text, replyToMessageId, tempId } = req.body;
     if (!text) {
       return res.status(400).json({ success: false, error: 'Message text is required' });
     }
@@ -112,7 +113,16 @@ router.post('/:conversationId/messages', authenticate, async (req, res) => {
     conversation.messages.push(message);
     await conversation.save();
     
-    res.json({ success: true, message: 'Message sent', conversation });
+    // Get the newly created message (the last one in the array)
+    const createdMessage = conversation.messages[conversation.messages.length - 1];
+    
+    // Return success with both the temp ID and the created message
+    res.json({ 
+      success: true, 
+      message: 'Message sent', 
+      tempId: tempId, // Return the temp ID sent by client
+      serverMessage: createdMessage
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ success: false, error: 'Server error' });
