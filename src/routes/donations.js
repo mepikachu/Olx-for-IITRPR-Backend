@@ -10,20 +10,25 @@ const upload = multer({ storage: storage });
 router.get('/', authenticate, async (req, res) => {
   try {
     let query = {};
-    
-    // If user is a volunteer, show uncollected donations
     if (req.user.role === 'volunteer') {
       query.status = 'available';
     } else {
-      // For normal users, show their donations
       query.donatedBy = req.user._id;
     }
-
     const donations = await DonationProduct.find(query)
       .populate('donatedBy', 'userName')
       .populate('collectedBy', 'userName');
-    
-    res.json({ success: true, donations });
+
+    const donationsData = donations.map(donation => {
+      const donationObj = donation.toObject();
+      donationObj.images = (donationObj.images || []).map(img => ({
+        data: img.data ? img.data.toString('base64') : null,
+        contentType: img.contentType
+      }));
+      return donationObj;
+    });
+
+    res.json({ success: true, donations: donationsData });
   } catch (err) {
     console.error(err);
     res.status(500).json({ success: false, error: 'Server error' });
@@ -31,31 +36,34 @@ router.get('/', authenticate, async (req, res) => {
 });
 
 // Add a donation (by normal user)
-router.post('/', authenticate, upload.array('images'), async (req, res) => {
+router.post('/', authenticate, upload.array('images', 5), async (req, res) => {
   try {
-    const { name, description } = req.body;
-    if (!name) {
-      return res.status(400).json({ success: false, error: 'Name is required' });
+    console.log("Received donation submission:", req.body);
+    console.log("Files received:", req.files.length);
+
+    const images = req.files.map(file => ({
+      data: file.buffer,
+      contentType: file.mimetype
+    }));
+
+    if (!req.body.name || !req.body.description) {
+      return res.status(400).json({ success: false, error: 'Missing required fields' });
     }
 
-    const donation = new DonationProduct({
-      name,
-      description,
+    const donationData = {
+      name: req.body.name,
+      description: req.body.description,
+      images: images,
       donatedBy: req.user._id,
       status: 'available'
-    });
+    };
 
-    if (req.files && req.files.length > 0) {
-      donation.images = req.files.map(file => ({
-        data: file.buffer,
-        contentType: file.mimetype
-      }));
-    }
+    const newDonation = new DonationProduct(donationData);
+    await newDonation.save();
 
-    await donation.save();
-    res.status(201).json({ success: true, donation });
+    res.status(201).json({ success: true, donation: newDonation });
   } catch (err) {
-    console.error('Donation submission error:', err);
+    console.error("Error in POST /donations:", err);
     res.status(500).json({ success: false, error: 'Server error', message: err.message });
   }
 });
