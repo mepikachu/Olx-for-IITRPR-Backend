@@ -53,7 +53,7 @@ router.get('/', authenticate, async (req, res) => {
       participants: req.user._id
     })
       .populate('participants', 'userName')
-      .populate('messages.sender', 'userName')
+      // Removed .populate('messages.sender', 'userName') to keep messages non-populated
       .lean();
 
     res.json({ success: true, conversations });
@@ -67,8 +67,8 @@ router.get('/', authenticate, async (req, res) => {
 router.get('/:conversationId', authenticate, async (req, res) => {
   try {
     const conversation = await Conversation.findById(req.params.conversationId)
-      .populate('participants', 'userName')
-      .populate('messages.sender', 'userName');
+      .populate('participants', 'userName');
+      // Removed .populate('messages.sender', 'userName') to keep messages non-populated
     
     if (!conversation) {
       return res.status(404).json({ success: false, error: 'Conversation not found' });
@@ -85,7 +85,6 @@ router.get('/:conversationId', authenticate, async (req, res) => {
   }
 });
 
-// Send message in conversation
 // Send message in conversation
 router.post('/:conversationId/messages', authenticate, async (req, res) => {
   try {
@@ -120,7 +119,7 @@ router.post('/:conversationId/messages', authenticate, async (req, res) => {
     res.json({ 
       success: true, 
       message: 'Message sent', 
-      tempId: tempId, // Return the temp ID sent by client
+      tempId: tempId, 
       serverMessage: createdMessage
     });
   } catch (err) {
