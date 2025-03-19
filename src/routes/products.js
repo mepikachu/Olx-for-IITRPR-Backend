@@ -10,25 +10,29 @@ const upload = multer({ storage: storage });
 // Get all products
 router.get('/', authenticate, async (req, res) => {
   try {
-    const filter = {
-      status: req.query.status || 'available',
-      seller: { $ne: req.user._id } // Exclude products where user is seller
-    };
+    let query = {};
+    
+    if (req.user.role === 'volunteer') {
+      query.status = 'available';
+    } else {
+      query.donatedBy = req.user._id;
+    }
 
-    let products = await Product.find(filter)
-      .populate('seller', 'userName')
-      .lean();
+    const donations = await DonationProduct.find(query)
+      .populate('donatedBy', 'userName')
+      .populate('collectedBy', 'userName');
 
-    // Convert image buffers to base64
-    products = products.map(product => ({
-      ...product,
-      images: product.images?.map(img => ({
-        data: img.data?.toString('base64'),
+    // Convert image buffers to base64.
+    const donationsData = donations.map(donation => {
+      const donationObj = donation.toObject();
+      donationObj.images = (donationObj.images || []).map(img => ({
+        data: img.data ? img.data.toString('base64') : null,
         contentType: img.contentType
-      })) || []
-    }));
+      }));
+      return donationObj;
+    });
 
-    res.json({ success: true, products });
+    res.json({ success: true, donations: donationsData });
   } catch (err) {
     console.error(err);
     res.status(500).json({ success: false, error: 'Server error' });
