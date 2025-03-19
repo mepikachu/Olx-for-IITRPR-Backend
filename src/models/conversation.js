@@ -16,6 +16,10 @@ const ConversationSchema = new mongoose.Schema({
       type: String,
       required: true
     },
+    replyToMessageId: {
+      type: String,
+      default: null
+    },
     createdAt: {
       type: Date,
       default: Date.now

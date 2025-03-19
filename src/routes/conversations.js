@@ -88,7 +88,7 @@ router.get('/:conversationId', authenticate, async (req, res) => {
 // Send message in conversation
 router.post('/:conversationId/messages', authenticate, async (req, res) => {
   try {
-    const { text } = req.body;
+    const { text, replyToMessageId } = req.body;
     if (!text) {
       return res.status(400).json({ success: false, error: 'Message text is required' });
     }
@@ -105,6 +105,7 @@ router.post('/:conversationId/messages', authenticate, async (req, res) => {
     const message = {
       sender: req.user._id,
       text,
+      replyToMessageId,
       createdAt: new Date()
     };
     
