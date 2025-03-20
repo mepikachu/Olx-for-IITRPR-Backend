@@ -53,7 +53,7 @@ router.get('/', authenticate, async (req, res) => {
       participants: req.user._id
     })
       .populate('participants', 'userName')
-      // Keep non-populated format for messages
+      // Removed .populate('messages.sender', 'userName') to keep messages non-populated
       .lean();
 
     res.json({ success: true, conversations });
@@ -68,6 +68,7 @@ router.get('/:conversationId', authenticate, async (req, res) => {
   try {
     const conversation = await Conversation.findById(req.params.conversationId)
       .populate('participants', 'userName');
+      // Removed .populate('messages.sender', 'userName') to keep messages non-populated
     
     if (!conversation) {
       return res.status(404).json({ success: false, error: 'Conversation not found' });
@@ -101,11 +102,10 @@ router.post('/:conversationId/messages', authenticate, async (req, res) => {
       return res.status(403).json({ success: false, error: 'Access denied' });
     }
     
-    // Ensure replyToMessageId is properly handled
     const message = {
       sender: req.user._id,
       text,
-      replyToMessageId: replyToMessageId || null, // Explicitly handle null case
+      replyToMessageId,
       createdAt: new Date()
     };
     
@@ -115,22 +115,12 @@ router.post('/:conversationId/messages', authenticate, async (req, res) => {
     // Get the newly created message (the last one in the array)
     const createdMessage = conversation.messages[conversation.messages.length - 1];
     
-    // Create a properly formatted response object with all fields
-    const responseMessage = {
-      _id: createdMessage._id,
-      sender: createdMessage.sender,
-      text: createdMessage.text,
-      replyToMessageId: createdMessage.replyToMessageId,
-      createdAt: createdMessage.createdAt
-    };
-    console.log(createdMessage.replyToMessageId);
-    
     // Return success with both the temp ID and the created message
     res.json({ 
       success: true, 
       message: 'Message sent', 
       tempId: tempId, 
-      serverMessage: responseMessage
+      serverMessage: createdMessage
     });
   } catch (err) {
     console.error(err);
