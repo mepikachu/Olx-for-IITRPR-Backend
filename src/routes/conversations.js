@@ -86,55 +86,54 @@ router.get('/:conversationId', authenticate, async (req, res) => {
   }
 });
 
-// routes/conversations.js
-// Inside the postMessage route handler
+// Send message in conversation
 router.post('/:conversationId/messages', authenticate, async (req, res) => {
   try {
-    const { conversationId } = req.params;
-    const { text } = req.body;
-    const senderId = req.user.id;
-    
-    // Get the conversation to find the other user
-    const conversation = await Conversation.findById(conversationId);
-    if (!conversation) {
-      return res.status(404).json({ message: 'Conversation not found' });
+    const { text, replyToMessageId, tempId } = req.body;
+    if (!text) {
+      return res.status(400).json({ success: false, error: 'Message text is required' });
     }
     
-    // Find the other participant
-    const otherUserId = conversation.participants.find(
-      participant => participant.toString() !== senderId
-    );
+    const conversation = await Conversation.findById(req.params.conversationId);
+    if (!conversation) {
+      return res.status(404).json({ success: false, error: 'Conversation not found' });
+    }
+
+    if (!conversation.participants.map(p => p.toString()).includes(req.user._id.toString())) {
+      return res.status(403).json({ success: false, error: 'Access denied' });
+    }
     
+    const message = {
+      sender: req.user._id,
+      text,
+      replyToMessageId,
+      createdAt: new Date()
+    };
+
     // Check if the recipient has blocked the sender
     const blockExists = await BlockList.findOne({
       blocker: otherUserId,
       blocked: senderId
     });
-    
-    // Create the message
-    const message = new Message({
-      conversation: conversationId,
-      sender: senderId,
-      text
-    });
-    
-    await message.save();
-    
-    // If not blocked, emit the message to the room
+
     if (!blockExists) {
-      io.to(conversationId).emit('message', {
-        _id: message._id,
-        sender: senderId,
-        text,
-        createdAt: message.createdAt
-      });
+      conversation.messages.push(message);
+      await conversation.save();
     }
     
-    // Always respond with success to the sender
-    return res.status(201).json(message);
-  } catch (error) {
-    console.error('Error sending message:', error);
-    res.status(500).json({ message: 'Server error' });
+    // Get the newly created message (the last one in the array)
+    const createdMessage = conversation.messages[conversation.messages.length - 1];
+    
+    // Return success with both the temp ID and the created message
+    res.json({ 
+      success: true, 
+      message: 'Message sent', 
+      tempId: tempId, 
+      serverMessage: createdMessage
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, error: 'Server error' });
   }
 });
 
