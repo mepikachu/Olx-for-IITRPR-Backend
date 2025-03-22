@@ -110,6 +110,10 @@ router.post('/:conversationId/messages', authenticate, async (req, res) => {
       createdAt: new Date()
     };
 
+    const otherUserId = conversation.participants.find(
+      participant => participant.toString() !== senderId
+    );
+
     // Check if the recipient has blocked the sender
     const blockExists = await BlockList.findOne({
       blocker: otherUserId,
