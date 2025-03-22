@@ -87,7 +87,7 @@ router.get('/:conversationId', authenticate, async (req, res) => {
 
 // routes/conversations.js
 // Inside the postMessage route handler
-router.post('/:conversationId/messages', auth, async (req, res) => {
+router.post('/:conversationId/messages', authenticate, async (req, res) => {
   try {
     const { conversationId } = req.params;
     const { text } = req.body;

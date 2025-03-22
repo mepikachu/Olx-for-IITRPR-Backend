@@ -1,7 +1,7 @@
 // routes/blockRoutes.js
 const express = require('express');
 const router = express.Router();
-const BlockList = require('../models/BlockList');
+const BlockList = require('../models/blockList');
 const auth = require('../middleware/auth');
 
 // Block a user

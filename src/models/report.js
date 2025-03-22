@@ -1,4 +1,6 @@
 // models/Report.js
+const mongoose = require('mongoose');
+
 const reportSchema = new mongoose.Schema({
   reporter: {
     type: mongoose.Schema.Types.ObjectId,
