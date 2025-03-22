@@ -120,18 +120,27 @@ router.post('/:conversationId/messages', authenticate, async (req, res) => {
     const blockExists = await BlockList.findOne({
       blocker: otherUserId,
       blocked: senderId
+    }) || await BlockList.findOne({
+      blocker: senderId,
+      blocked: otherUserId
     });
+
+    let createdMessage;
 
     if (!blockExists) {
       conversation.messages.push(message);
+      await conversation.save();
+      createdMessage = conversation.messages[conversation.messages.length - 1];
+    } else {
+      createdMessage = {
+        _id: tempId || new mongoose.Types.ObjectId().toString(), // Generate a fake ID
+        sender: req.user._id,
+        text,
+        replyToMessageId,
+        createdAt: new Date()
+      };
     }
 
-    await conversation.save();
-    
-    // Get the newly created message (the last one in the array)
-    const createdMessage = conversation.messages[conversation.messages.length - 1];
-    
-    // Return success with both the temp ID and the created message
     res.json({ 
       success: true, 
       message: 'Message sent', 
