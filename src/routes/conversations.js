@@ -90,6 +90,8 @@ router.get('/:conversationId', authenticate, async (req, res) => {
 router.post('/:conversationId/messages', authenticate, async (req, res) => {
   try {
     const { text, replyToMessageId, tempId } = req.body;
+    const senderId = req.user.id;
+
     if (!text) {
       return res.status(400).json({ success: false, error: 'Message text is required' });
     }
