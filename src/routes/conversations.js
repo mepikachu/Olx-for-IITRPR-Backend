@@ -124,8 +124,9 @@ router.post('/:conversationId/messages', authenticate, async (req, res) => {
 
     if (!blockExists) {
       conversation.messages.push(message);
-      await conversation.save();
     }
+
+    await conversation.save();
     
     // Get the newly created message (the last one in the array)
     const createdMessage = conversation.messages[conversation.messages.length - 1];
