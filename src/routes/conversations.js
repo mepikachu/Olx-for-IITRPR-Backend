@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const Conversation = require('../models/conversation');
 const authenticate = require('../middleware/auth');
+const BlockList = require('../models/BlockList');
 
 // Create or retrieve a conversation
 router.post('/', authenticate, async (req, res) => {
