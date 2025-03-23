@@ -87,28 +87,20 @@ router.get('/:conversationId', authenticate, async (req, res) => {
 });
 
 // Get conversation messages since a specific ID
-router.get('/conversations/:conversationId/messages', authenticate, async (req, res) => {
+router.get('/:conversationId/messages', authenticate, async (req, res) => {
   try {
     const { conversationId } = req.params;
     const { since } = req.query;
     
     // Find the conversation
-    const conversation = await Conversation.findById(conversationId)
-      .populate('participants', 'userName')
-      .populate({
-        path: 'messages',
-        populate: {
-          path: 'sender',
-          select: 'userName'
-        }
-      });
+    const conversation = await Conversation.findById(conversationId);
     
     if (!conversation) {
       return res.status(404).json({ success: false, error: 'Conversation not found' });
     }
     
     // Verify user is a participant
-    if (!conversation.participants.some(p => p._id.toString() === req.user._id.toString())) {
+    if (!conversation.participants.some(p => p.toString() === req.user._id.toString())) {
       return res.status(403).json({ success: false, error: 'Not authorized to view this conversation' });
     }
     
@@ -116,16 +108,12 @@ router.get('/conversations/:conversationId/messages', authenticate, async (req, 
     
     // If "since" parameter is provided, only get messages after that one
     if (since) {
-      const sinceMessage = await Message.findById(since);
+      // Find the index of the "since" message in the conversation
+      const sinceIndex = conversation.messages.findIndex(m => m._id.toString() === since);
       
-      if (sinceMessage) {
-        messages = await Message.find({
-          _id: { $ne: since },
-          conversationId: conversationId,
-          createdAt: { $gt: sinceMessage.createdAt }
-        })
-        .populate('sender', 'userName')
-        .sort({ createdAt: 1 });
+      if (sinceIndex !== -1) {
+        // Return all messages after the "since" message
+        messages = conversation.messages.slice(sinceIndex + 1);
       } else {
         // If message not found, return all messages
         messages = conversation.messages;
@@ -141,6 +129,7 @@ router.get('/conversations/:conversationId/messages', authenticate, async (req, 
     res.status(500).json({ success: false, error: 'Server error' });
   }
 });
+
 
 // Send message in conversation
 router.post('/:conversationId/messages', authenticate, async (req, res) => {
