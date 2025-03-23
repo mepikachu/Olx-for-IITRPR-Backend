@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 
-const DonationProductSchema = new mongoose.Schema({
+const DonationsSchema = new mongoose.Schema({
   name: { 
     type: String, 
     required: true 
@@ -31,4 +31,4 @@ const DonationProductSchema = new mongoose.Schema({
   }
 }, { timestamps: true });
 
-module.exports = mongoose.model('DonationProduct', DonationProductSchema);
+module.exports = mongoose.model('Donations', DonationsSchema);

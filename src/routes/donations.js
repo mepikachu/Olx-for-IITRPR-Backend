@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const DonationProduct = require('../models/donation');
+const Donations = require('../models/donation');
 const authenticate = require('../middleware/auth');
 const multer = require('multer');
 const storage = multer.memoryStorage();
@@ -15,7 +15,7 @@ router.get('/', authenticate, async (req, res) => {
     } else {
       query.donatedBy = req.user._id;
     }
-    const donations = await DonationProduct.find(query)
+    const donations = await Donations.find(query)
       .populate('donatedBy', 'userName')
       .populate('collectedBy', 'userName');
 
@@ -58,7 +58,7 @@ router.post('/', authenticate, upload.array('images', 5), async (req, res) => {
       status: 'available'
     };
 
-    const newDonation = new DonationProduct(donationData);
+    const newDonation = new Donations(donationData);
     await newDonation.save();
 
     res.status(201).json({ success: true, donation: newDonation });
@@ -78,7 +78,7 @@ router.post('/:donationId/collect', authenticate, async (req, res) => {
       });
     }
 
-    const donation = await DonationProduct.findById(req.params.donationId);
+    const donation = await Donations.findById(req.params.donationId);
     if (!donation) {
       return res.status(404).json({ success: false, error: 'Donation not found' });
     }
@@ -101,7 +101,7 @@ router.post('/:donationId/collect', authenticate, async (req, res) => {
 // Get donation leaderboard
 router.get('/leaderboard', authenticate, async (req, res) => {
   try {
-    const donorsLeaderboard = await DonationProduct.aggregate([
+    const donorsLeaderboard = await Donations.aggregate([
       {
         $group: {
           _id: '$donatedBy',
@@ -128,7 +128,7 @@ router.get('/leaderboard', authenticate, async (req, res) => {
       }
     ]);
 
-    const volunteersLeaderboard = await DonationProduct.aggregate([
+    const volunteersLeaderboard = await Donations.aggregate([
       {
         $match: { status: 'collected' }
       },
