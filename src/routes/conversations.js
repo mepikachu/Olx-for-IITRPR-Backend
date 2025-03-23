@@ -142,4 +142,71 @@ router.get('/conversations/:conversationId/messages', authenticate, async (req, 
   }
 });
 
+// Send message in conversation
+router.post('/:conversationId/messages', authenticate, async (req, res) => {
+  try {
+    const { text, replyToMessageId, tempId } = req.body;
+    const senderId = req.user.id;
+
+    if (!text) {
+      return res.status(400).json({ success: false, error: 'Message text is required' });
+    }
+    
+    const conversation = await Conversation.findById(req.params.conversationId);
+    if (!conversation) {
+      return res.status(404).json({ success: false, error: 'Conversation not found' });
+    }
+
+    if (!conversation.participants.map(p => p.toString()).includes(req.user._id.toString())) {
+      return res.status(403).json({ success: false, error: 'Access denied' });
+    }
+    
+    const message = {
+      sender: req.user._id,
+      text,
+      replyToMessageId,
+      createdAt: new Date()
+    };
+
+    const otherUserId = conversation.participants.find(
+      participant => participant.toString() !== senderId
+    );
+
+    // Check if the recipient has blocked the sender
+    const blockExists = await BlockList.findOne({
+      blocker: otherUserId,
+      blocked: senderId
+    }) || await BlockList.findOne({
+      blocker: senderId,
+      blocked: otherUserId
+    });
+
+    let createdMessage;
+
+    if (!blockExists) {
+      conversation.messages.push(message);
+      await conversation.save();
+      createdMessage = conversation.messages[conversation.messages.length - 1];
+    } else {
+      createdMessage = {
+        _id: tempId || new mongoose.Types.ObjectId().toString(), // Generate a fake ID
+        sender: req.user._id,
+        text,
+        replyToMessageId,
+        createdAt: new Date()
+      };
+    }
+
+    res.json({ 
+      success: true, 
+      message: 'Message sent', 
+      tempId: tempId, 
+      serverMessage: createdMessage
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+});
+
 module.exports = router;
