@@ -133,4 +133,82 @@ router.get('/:userId', authenticate, async (req, res) => {
   }
 });
 
+// Get user profile picture
+router.get('/profile-picture/:userId', async (req, res) => {
+  try {
+    const user = await User.findById(req.params.userId);
+    
+    if (!user || !user.profilePicture || !user.profilePicture.data) {
+      return res.status(404).json({ 
+        success: false, 
+        error: 'Profile picture not found' 
+      });
+    }
+
+    res.set('Content-Type', user.profilePicture.contentType);
+    res.send(user.profilePicture.data);
+  } catch (err) {
+    console.error('Error fetching profile picture:', err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+});
+
+// Get user profile by ID (for viewing)
+router.get('/profile/:userId', authenticate, async (req, res) => {
+  try {
+    const requestedUserId = req.params.userId;
+    const isAdmin = req.user.role === 'admin';
+    
+    // Find the user
+    const user = await User.findById(requestedUserId)
+      .select('-password -authCookie -authCookieCreated -authCookieExpires');
+    
+    if (!user) {
+      return res.status(404).json({ 
+        success: false, 
+        error: 'User not found' 
+      });
+    }
+    
+    // Find user's donations
+    const donations = await require('../models/donation').find({ 
+      donatedBy: requestedUserId 
+    });
+    
+    // If not admin, filter what data to show
+    if (!isAdmin && req.user._id.toString() !== requestedUserId) {
+      // For non-admins viewing other profiles, only return limited info
+      return res.json({
+        success: true,
+        user: {
+          _id: user._id,
+          userName: user.userName,
+          role: user.role,
+          address: user.address,
+          profilePicture: user.profilePicture ? true : false,
+          registrationDate: user.registrationDate
+        },
+        donations: donations.map(d => ({
+          _id: d._id,
+          name: d.name,
+          description: d.description,
+          status: d.status,
+          donationDate: d.donationDate
+        }))
+      });
+    }
+    
+    // Admin view or user viewing their own profile
+    return res.json({
+      success: true,
+      user: user,
+      donations: donations
+    });
+  } catch (err) {
+    console.error('Error fetching user profile:', err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+});
+
+
 module.exports = router;
