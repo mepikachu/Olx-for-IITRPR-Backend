@@ -20,20 +20,17 @@ const ConversationSchema = new mongoose.Schema({
       type: String,
       required: true
     },
+    // For replying to messages or products
     replyTo: {
-      type: Number,
-      default: null
-    },
-    // Fields for product reply
-    type: {
-      type: String,
-      enum: ['message', 'product'],
-      default: 'message'
-    },
-    productId: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Product', 
-      default: null
+      id: {
+        type: mongoose.Schema.Types.Mixed, // Can be messageId (Number) or productId (ObjectId)
+        default: null
+      },
+      type: {
+        type: String,
+        enum: ['message', 'product'],
+        default: null
+      }
     },
     createdAt: {
       type: Date,
@@ -48,6 +45,7 @@ const ConversationSchema = new mongoose.Schema({
 
 // Ensure exactly two participants
 ConversationSchema.index({ participants: 1 });
+
 ConversationSchema.path('participants').validate(function (value) {
   return value.length === 2;
 }, 'A conversation must have exactly two participants.');

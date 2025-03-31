@@ -15,12 +15,13 @@ router.post('/', authenticate, async (req, res) => {
     }
     
     const participants = [req.user._id, participantId].sort();
+    
     let conversation = await Conversation.findOne({
       participants: { $all: participants }
     });
     
     if (!conversation) {
-      conversation = new Conversation({ 
+      conversation = new Conversation({
         participants,
         nextMessageId: 1
       });
@@ -78,6 +79,7 @@ router.get('/:conversationId/messages', authenticate, async (req, res) => {
     const { lastId } = req.query;
     
     const conversation = await Conversation.findById(conversationId);
+    
     if (!conversation) {
       return res.status(404).json({ success: false, error: 'Conversation not found' });
     }
@@ -108,9 +110,8 @@ router.get('/:conversationId/messages', authenticate, async (req, res) => {
     
     // If blocked, filter out messages that should be hidden
     if (blockExists) {
-      messages = messages.filter(msg => 
-        msg.sender.toString() === req.user._id.toString() || 
-        msg.type === 'product'
+      messages = messages.filter(msg =>
+        msg.sender.toString() === req.user._id.toString()
       );
     }
     
@@ -121,16 +122,17 @@ router.get('/:conversationId/messages', authenticate, async (req, res) => {
   }
 });
 
-// Send message with incremental message ID
+// Send message - unified endpoint for all message types
 router.post('/:conversationId/messages', authenticate, async (req, res) => {
   try {
-    const { text, replyTo, tempId } = req.body;
+    const { text, replyTo, replyType, tempId } = req.body;
     
     if (!text) {
       return res.status(400).json({ success: false, error: 'Message text is required' });
     }
     
     const conversation = await Conversation.findById(req.params.conversationId);
+    
     if (!conversation) {
       return res.status(404).json({ success: false, error: 'Conversation not found' });
     }
@@ -145,10 +147,16 @@ router.post('/:conversationId/messages', authenticate, async (req, res) => {
       messageId: currentMessageId,
       sender: req.user._id,
       text,
-      replyTo,
-      type: 'message',
       createdAt: new Date()
     };
+    
+    // Handle reply to message or product
+    if (replyTo && replyType) {
+      message.replyTo = {
+        id: replyTo,
+        type: replyType // 'message' or 'product'
+      };
+    }
     
     // Check if the recipient has blocked the sender
     const otherUserId = conversation.participants.find(
@@ -174,50 +182,6 @@ router.post('/:conversationId/messages', authenticate, async (req, res) => {
       message: 'Message sent',
       messageId: currentMessageId,
       tempId
-    });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ success: false, error: 'Server error' });
-  }
-});
-
-// Send product reply message
-router.post('/:conversationId/product-reply', authenticate, async (req, res) => {
-  try {
-    const { productId } = req.body;
-    
-    if (!productId) {
-      return res.status(400).json({ success: false, error: 'Product ID required' });
-    }
-    
-    const conversation = await Conversation.findById(req.params.conversationId);
-    if (!conversation) {
-      return res.status(404).json({ success: false, error: 'Conversation not found' });
-    }
-    
-    if (!conversation.participants.some(p => p._id.toString() === req.user._id.toString())) {
-      return res.status(403).json({ success: false, error: 'Access denied' });
-    }
-    
-    const currentMessageId = conversation.nextMessageId || 1;
-    
-    const productMessage = {
-      messageId: currentMessageId,
-      sender: req.user._id,
-      text: `Product Reply`, // Simple placeholder text
-      type: 'product',
-      productId: productId,
-      createdAt: new Date()
-    };
-    
-    conversation.messages.push(productMessage);
-    conversation.nextMessageId = currentMessageId + 1;
-    await conversation.save();
-    
-    res.json({
-      success: true,
-      message: 'Product reply sent',
-      messageId: currentMessageId
     });
   } catch (err) {
     console.error(err);
