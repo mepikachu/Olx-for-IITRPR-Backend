@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+const mongoose = require('mongoose');
 const Conversation = require('../models/conversation');
 const authenticate = require('../middleware/auth');
 const BlockList = require('../models/blockList');
@@ -7,39 +8,25 @@ const BlockList = require('../models/blockList');
 // Create or retrieve a conversation
 router.post('/', authenticate, async (req, res) => {
   try {
-    const { participantId, productPreview, firstMessage } = req.body;
+    const { participantId } = req.body;
+    
     if (!participantId) {
       return res.status(400).json({ success: false, error: 'participantId is required' });
     }
-
+    
     const participants = [req.user._id, participantId].sort();
     let conversation = await Conversation.findOne({
       participants: { $all: participants }
     });
-
+    
     if (!conversation) {
-      conversation = new Conversation({ participants });
-      
-      if (productPreview && firstMessage) {
-        const productReplyMessage = {
-          type: 'product_reply',
-          productId: productPreview.productId,
-          productName: productPreview.productName,
-          price: productPreview.price,
-          image: productPreview.image,
-          createdAt: new Date(),
-        };
-        const userMessage = {
-          sender: req.user._id,
-          text: firstMessage,
-          createdAt: new Date()
-        };
-        conversation.messages.push(productReplyMessage);
-        conversation.messages.push(userMessage);
-      }
+      conversation = new Conversation({ 
+        participants,
+        nextMessageId: 1
+      });
+      await conversation.save();
     }
-
-    await conversation.save();
+    
     res.json({ success: true, conversation });
   } catch (err) {
     console.error(err);
@@ -53,10 +40,9 @@ router.get('/', authenticate, async (req, res) => {
     const conversations = await Conversation.find({
       participants: req.user._id
     })
-      .populate('participants', 'userName')
-      // Removed .populate('messages.sender', 'userName') to keep messages non-populated
-      .lean();
-
+    .populate('participants', 'userName')
+    .lean();
+    
     res.json({ success: true, conversations });
   } catch (err) {
     console.error(err);
@@ -69,13 +55,12 @@ router.get('/:conversationId', authenticate, async (req, res) => {
   try {
     const conversation = await Conversation.findById(req.params.conversationId)
       .populate('participants', 'userName');
-      // Removed .populate('messages.sender', 'userName') to keep messages non-populated
-    
+      
     if (!conversation) {
       return res.status(404).json({ success: false, error: 'Conversation not found' });
     }
-
-    if (!conversation.participants.map(p => p._id.toString()).includes(req.user._id.toString())) {
+    
+    if (!conversation.participants.some(p => p._id.toString() === req.user._id.toString())) {
       return res.status(403).json({ success: false, error: 'Access denied' });
     }
     
@@ -86,57 +71,61 @@ router.get('/:conversationId', authenticate, async (req, res) => {
   }
 });
 
-// Get conversation messages since a specific ID
+// Fetch messages after a specific ID
 router.get('/:conversationId/messages', authenticate, async (req, res) => {
   try {
     const { conversationId } = req.params;
-    const { since } = req.query;
+    const { lastId } = req.query;
     
-    // Find the conversation
     const conversation = await Conversation.findById(conversationId);
-    
     if (!conversation) {
       return res.status(404).json({ success: false, error: 'Conversation not found' });
     }
     
-    // Verify user is a participant
-    if (!conversation.participants.some(p => p.toString() === req.user._id.toString())) {
-      return res.status(403).json({ success: false, error: 'Not authorized to view this conversation' });
+    if (!conversation.participants.some(p => p._id.toString() === req.user._id.toString())) {
+      return res.status(403).json({ success: false, error: 'Access denied' });
     }
     
     let messages = [];
-    
-    // If "since" parameter is provided, only get messages after that one
-    if (since) {
-      // Find the index of the "since" message in the conversation
-      const sinceIndex = conversation.messages.findIndex(m => m._id.toString() === since);
-      
-      if (sinceIndex !== -1) {
-        // Return all messages after the "since" message
-        messages = conversation.messages.slice(sinceIndex + 1);
-      } else {
-        // If message not found, return all messages
-        messages = conversation.messages;
-      }
+    if (lastId) {
+      // Find messages after the lastId
+      const lastIdNum = parseInt(lastId);
+      messages = conversation.messages.filter(msg => msg.messageId > lastIdNum);
     } else {
-      // If no "since" parameter, return all messages
+      // Return all messages if no lastId provided
       messages = conversation.messages;
+    }
+    
+    // Check if the other user has blocked this user
+    const otherUserId = conversation.participants.find(
+      p => p.toString() !== req.user._id.toString()
+    );
+    
+    const blockExists = await BlockList.findOne({
+      blocker: otherUserId,
+      blocked: req.user._id
+    });
+    
+    // If blocked, filter out messages that should be hidden
+    if (blockExists) {
+      messages = messages.filter(msg => 
+        msg.sender.toString() === req.user._id.toString() || 
+        msg.type === 'product'
+      );
     }
     
     res.json({ success: true, messages });
   } catch (error) {
-    console.error('Error fetching conversation messages:', error);
+    console.error('Error fetching messages:', error);
     res.status(500).json({ success: false, error: 'Server error' });
   }
 });
 
-
-// Send message in conversation
+// Send message with incremental message ID
 router.post('/:conversationId/messages', authenticate, async (req, res) => {
   try {
-    const { text, replyToMessageId, tempId } = req.body;
-    const senderId = req.user.id;
-
+    const { text, replyTo, tempId } = req.body;
+    
     if (!text) {
       return res.status(400).json({ success: false, error: 'Message text is required' });
     }
@@ -145,52 +134,90 @@ router.post('/:conversationId/messages', authenticate, async (req, res) => {
     if (!conversation) {
       return res.status(404).json({ success: false, error: 'Conversation not found' });
     }
-
-    if (!conversation.participants.map(p => p.toString()).includes(req.user._id.toString())) {
+    
+    if (!conversation.participants.some(p => p._id.toString() === req.user._id.toString())) {
       return res.status(403).json({ success: false, error: 'Access denied' });
     }
     
+    const currentMessageId = conversation.nextMessageId || 1;
+    
     const message = {
+      messageId: currentMessageId,
       sender: req.user._id,
       text,
-      replyToMessageId,
+      replyTo,
+      type: 'message',
       createdAt: new Date()
     };
-
-    const otherUserId = conversation.participants.find(
-      participant => participant.toString() !== senderId
-    );
-
+    
     // Check if the recipient has blocked the sender
+    const otherUserId = conversation.participants.find(
+      p => p.toString() !== req.user._id.toString()
+    );
+    
     const blockExists = await BlockList.findOne({
       blocker: otherUserId,
-      blocked: senderId
-    }) || await BlockList.findOne({
-      blocker: senderId,
-      blocked: otherUserId
+      blocked: req.user._id
     });
-
-    let createdMessage;
-
+    
+    // Always increment message ID regardless of block status
+    conversation.nextMessageId = currentMessageId + 1;
+    
     if (!blockExists) {
       conversation.messages.push(message);
-      await conversation.save();
-      createdMessage = conversation.messages[conversation.messages.length - 1];
-    } else {
-      createdMessage = {
-        _id: tempId || new mongoose.Types.ObjectId().toString(), // Generate a fake ID
-        sender: req.user._id,
-        text,
-        replyToMessageId,
-        createdAt: new Date()
-      };
     }
+    
+    await conversation.save();
+    
+    res.json({
+      success: true,
+      message: 'Message sent',
+      messageId: currentMessageId,
+      tempId
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+});
 
-    res.json({ 
-      success: true, 
-      message: 'Message sent', 
-      tempId: tempId, 
-      serverMessage: createdMessage
+// Send product reply message
+router.post('/:conversationId/product-reply', authenticate, async (req, res) => {
+  try {
+    const { productId } = req.body;
+    
+    if (!productId) {
+      return res.status(400).json({ success: false, error: 'Product ID required' });
+    }
+    
+    const conversation = await Conversation.findById(req.params.conversationId);
+    if (!conversation) {
+      return res.status(404).json({ success: false, error: 'Conversation not found' });
+    }
+    
+    if (!conversation.participants.some(p => p._id.toString() === req.user._id.toString())) {
+      return res.status(403).json({ success: false, error: 'Access denied' });
+    }
+    
+    const currentMessageId = conversation.nextMessageId || 1;
+    
+    const productMessage = {
+      messageId: currentMessageId,
+      sender: req.user._id,
+      text: `Product Reply`, // Simple placeholder text
+      type: 'product',
+      productId: productId,
+      createdAt: new Date()
+    };
+    
+    conversation.messages.push(productMessage);
+    conversation.nextMessageId = currentMessageId + 1;
+    await conversation.save();
+    
+    res.json({
+      success: true,
+      message: 'Product reply sent',
+      messageId: currentMessageId
     });
   } catch (err) {
     console.error(err);

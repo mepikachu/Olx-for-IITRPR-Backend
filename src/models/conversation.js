@@ -7,6 +7,10 @@ const ConversationSchema = new mongoose.Schema({
     required: true
   }],
   messages: [{
+    messageId: {
+      type: Number,
+      default: 1
+    },
     sender: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
@@ -16,15 +20,30 @@ const ConversationSchema = new mongoose.Schema({
       type: String,
       required: true
     },
-    replyToMessageId: {
+    replyTo: {
+      type: Number,
+      default: null
+    },
+    // Fields for product reply
+    type: {
       type: String,
+      enum: ['message', 'product'],
+      default: 'message'
+    },
+    productId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Product', 
       default: null
     },
     createdAt: {
       type: Date,
       default: Date.now
     }
-  }]
+  }],
+  nextMessageId: {
+    type: Number,
+    default: 1
+  }
 }, { timestamps: true });
 
 // Ensure exactly two participants
