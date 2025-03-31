@@ -35,6 +35,32 @@ router.get('/', authenticate, async (req, res) => {
   }
 });
 
+// Get product by ID
+router.get('/:productId', authenticate, async (req, res) => {
+  try {
+    const { productId } = req.params;
+    
+    let product = await Product.findById(productId)
+      .populate('seller', 'userName')
+      .lean();
+    
+    if (!product) {
+      return res.status(404).json({ success: false, error: 'Product not found' });
+    }
+    
+    // Convert image buffers to base64
+    product.images = product.images?.map(img => ({
+      data: img.data?.toString('base64'),
+      contentType: img.contentType
+    })) || [];
+    
+    res.json({ success: true, product });
+  } catch (err) {
+    console.error('Error fetching product:', err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+});
+
 // Create a new product
 router.post('/', authenticate, upload.array('images', 5), async (req, res) => {
   try {
