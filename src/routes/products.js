@@ -337,4 +337,58 @@ router.post('/offers/:offerId/decline', authenticate, async (req, res) => {
   }
 });
 
+// Make an offer
+router.post('/:productId/make-offer', authenticate, async (req, res) => {
+  try {
+    const { productId } = req.params;
+    const { offerPrice } = req.body;
+
+    if (!offerPrice) {
+      return res.status(400).json({ success: false, error: 'Offer price is required' });
+    }
+
+    const product = await Product.findById(productId);
+    if (!product) {
+      return res.status(404).json({ success: false, error: 'Product not found' });
+    }
+
+    if (product.seller.toString() === req.user._id.toString()) {
+      return res.status(400).json({ success: false, error: 'Cannot make offer on your own product' });
+    }
+
+    if (product.status !== 'available') {
+      return res.status(400).json({ success: false, error: 'Product is not available' });
+    }
+
+    // Check if user already has an offer
+    const existingOffer = product.offerRequests.find(
+      offer => offer.buyer.toString() === req.user._id.toString()
+    );
+
+    if (existingOffer) {
+      existingOffer.offerPrice = offerPrice;
+    } else {
+      product.offerRequests.push({
+        offerPrice,
+        buyer: req.user._id
+      });
+    }
+
+    await product.save();
+
+    // Create notification for seller
+    await createNotification(
+      product.seller,
+      'offer',
+      productId,
+      `New offer of ₹${offerPrice} received for "${product.name}"`
+    );
+
+    res.json({ success: true, message: 'Offer made successfully' });
+  } catch (err) {
+    console.error('Error making offer:', err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+});
+
 module.exports = router;
