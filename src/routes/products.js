@@ -104,10 +104,10 @@ router.post('/', authenticate, upload.array('images', 5), async (req, res) => {
 });
 
 // Update a product
-router.put('/:productId', authenticate, upload.array('images', 5), async (req, res) => {
+router.put('/:productId', authenticate, async (req, res) => {
   try {
     const { productId } = req.params;
-    const { description, price, existingImages } = req.body;
+    const { name, description } = req.body;
 
     const product = await Product.findById(productId);
     if (!product) {
@@ -118,52 +118,9 @@ router.put('/:productId', authenticate, upload.array('images', 5), async (req, r
       return res.status(403).json({ success: false, error: 'Access denied' });
     }
 
-    // Parse existing images JSON if provided
-    let updatedImages = [];
-    if (existingImages) {
-      updatedImages = JSON.parse(existingImages).map(img => ({
-        data: Buffer.from(img.data, 'base64'),
-        contentType: img.contentType
-      }));
-    }
-
-    // Add new uploaded images
-    if (req.files && req.files.length > 0) {
-      const newImages = req.files.map(file => ({
-        data: file.buffer,
-        contentType: file.mimetype
-      }));
-      updatedImages = [...updatedImages, ...newImages];
-    }
-
-    // Validate at least one image
-    if (updatedImages.length === 0) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Product must have at least one image' 
-      });
-    }
-
-    // Validate price if provided
-    let updatedPrice = product.price;
-    if (price) {
-      const parsedPrice = parseFloat(price);
-      if (isNaN(parsedPrice)) {
-        return res.status(400).json({ 
-          success: false, 
-          error: 'Price must be a valid number' 
-        });
-      }
-      updatedPrice = parsedPrice;
-    }
-
     const updatedProduct = await Product.findByIdAndUpdate(
       productId,
-      { 
-        description: description || product.description,
-        price: updatedPrice,
-        images: updatedImages
-      },
+      { name, description },
       { new: true }
     );
 
@@ -238,64 +195,6 @@ router.get('/:productId/offers', authenticate, async (req, res) => {
     res.json({ success: true, offerRequests: product.offerRequests });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ success: false, error: 'Server error' });
-  }
-});
-
-// Accept an offer
-router.post('/offers/:offerId/accept', authenticate, async (req, res) => {
-  try {
-    const { productId } = req.body;
-    const { offerId } = req.params;
-
-    const product = await Product.findById(productId);
-    if (!product) {
-      return res.status(404).json({ success: false, error: 'Product not found' });
-    }
-
-    const offer = product.offerRequests.id(offerId);
-    if (!offer) {
-      return res.status(404).json({ success: false, error: 'Offer not found' });
-    }
-
-    // Update product status and buyer
-    product.status = 'sold';
-    product.buyer = offer.buyer;
-    product.transactionDate = new Date();
-
-    // Clear all offers as the product is now sold
-    product.offerRequests = [];
-
-    await product.save();
-
-    res.json({ success: true, message: 'Offer accepted successfully' });
-  } catch (err) {
-    console.error('Error accepting offer:', err);
-    res.status(500).json({ success: false, error: 'Server error' });
-  }
-});
-
-// Reject an offer
-router.post('/offers/:offerId/decline', authenticate, async (req, res) => {
-  try {
-    const { productId } = req.body;
-    const { offerId } = req.params;
-
-    const product = await Product.findById(productId);
-    if (!product) {
-      return res.status(404).json({ success: false, error: 'Product not found' });
-    }
-
-    // Remove the specific offer
-    product.offerRequests = product.offerRequests.filter(
-      offer => offer._id.toString() !== offerId
-    );
-
-    await product.save();
-
-    res.json({ success: true, message: 'Offer rejected successfully' });
-  } catch (err) {
-    console.error('Error rejecting offer:', err);
     res.status(500).json({ success: false, error: 'Server error' });
   }
 });
