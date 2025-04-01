@@ -242,4 +242,62 @@ router.get('/:productId/offers', authenticate, async (req, res) => {
   }
 });
 
+// Accept an offer
+router.post('/offers/:offerId/accept', authenticate, async (req, res) => {
+  try {
+    const { productId } = req.body;
+    const { offerId } = req.params;
+
+    const product = await Product.findById(productId);
+    if (!product) {
+      return res.status(404).json({ success: false, error: 'Product not found' });
+    }
+
+    const offer = product.offerRequests.id(offerId);
+    if (!offer) {
+      return res.status(404).json({ success: false, error: 'Offer not found' });
+    }
+
+    // Update product status and buyer
+    product.status = 'sold';
+    product.buyer = offer.buyer;
+    product.transactionDate = new Date();
+
+    // Clear all offers as the product is now sold
+    product.offerRequests = [];
+
+    await product.save();
+
+    res.json({ success: true, message: 'Offer accepted successfully' });
+  } catch (err) {
+    console.error('Error accepting offer:', err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+});
+
+// Reject an offer
+router.post('/offers/:offerId/decline', authenticate, async (req, res) => {
+  try {
+    const { productId } = req.body;
+    const { offerId } = req.params;
+
+    const product = await Product.findById(productId);
+    if (!product) {
+      return res.status(404).json({ success: false, error: 'Product not found' });
+    }
+
+    // Remove the specific offer
+    product.offerRequests = product.offerRequests.filter(
+      offer => offer._id.toString() !== offerId
+    );
+
+    await product.save();
+
+    res.json({ success: true, message: 'Offer rejected successfully' });
+  } catch (err) {
+    console.error('Error rejecting offer:', err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+});
+
 module.exports = router;
