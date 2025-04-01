@@ -5,99 +5,7 @@ const User = require('../models/user');
 const authenticate = require('../middleware/auth');
 const multer = require('multer');
 const storage = multer.memoryStorage();
-
-// CRITICAL CHANGE 1: Added file size limits and validation
-const upload = multer({
-  storage: storage,
-  limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB per file
-    files: 5 // Max 5 files
-  },
-  fileFilter: (req, file, cb) => {
-    if (file.mimetype.startsWith('image/')) {
-      cb(null, true);
-    } else {
-      cb(new Error('Only image files are allowed!'), false);
-    }
-  }
-});
-
-// Create product endpoint (modified)
-router.post('/', authenticate, upload.array('images', 5), async (req, res) => {
-  try {
-    // VALIDATION: Check required fields first
-    if (!req.body.name || !req.body.description || !req.body.price) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Missing required fields (name, description, price)' 
-      });
-    }
-
-    // VALIDATION: Ensure images are present
-    if (!req.files || req.files.length === 0) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'At least one image required' 
-      });
-    }
-
-    // PROCESS IMAGES: Added size validation
-    const images = [];
-    for (const file of req.files) {
-      if (file.size > 5 * 1024 * 1024) {
-        return res.status(400).json({
-          success: false,
-          error: `Image ${file.originalname} exceeds 5MB limit`
-        });
-      }
-      images.push({
-        data: file.buffer,
-        contentType: file.mimetype
-      });
-    }
-
-    // Create product with error handling
-    const newProduct = new Product({
-      name: req.body.name,
-      description: req.body.description,
-      price: parseFloat(req.body.price),
-      category: req.body.category,
-      seller: req.user._id,
-      images: images,
-      status: 'available'
-    });
-
-    await newProduct.save();
-
-    // Update user with error suppression
-    try {
-      await User.findByIdAndUpdate(req.user._id, {
-        $push: { soldProducts: newProduct._id }
-      });
-    } catch (userUpdateError) {
-      console.error('User update failed:', userUpdateError);
-    }
-
-    res.status(201).json({
-      success: true,
-      message: 'Product created successfully',
-      productId: newProduct._id
-    });
-
-  } catch (err) {
-    console.error('Product Creation Error:', err);
-    const errorMessage = err.name === 'ValidationError' 
-      ? Object.values(err.errors).map(e => e.message).join(', ')
-      : 'Server error during product creation';
-      
-    res.status(500).json({ 
-      success: false, 
-      error: errorMessage 
-    });
-  }
-});
-
-// Rest of the file remains same...
+const upload = multer({ storage: storage });
 
 // Get all products
 router.get('/', authenticate, async (req, res) => {
@@ -196,10 +104,10 @@ router.post('/', authenticate, upload.array('images', 5), async (req, res) => {
 });
 
 // Update a product
-router.put('/:productId', authenticate, async (req, res) => {
+router.put('/:productId', authenticate, upload.array('images', 5), async (req, res) => {
   try {
     const { productId } = req.params;
-    const { name, description } = req.body;
+    const { description, price, existingImages } = req.body;
 
     const product = await Product.findById(productId);
     if (!product) {
@@ -210,9 +118,52 @@ router.put('/:productId', authenticate, async (req, res) => {
       return res.status(403).json({ success: false, error: 'Access denied' });
     }
 
+    // Parse existing images JSON if provided
+    let updatedImages = [];
+    if (existingImages) {
+      updatedImages = JSON.parse(existingImages).map(img => ({
+        data: Buffer.from(img.data, 'base64'),
+        contentType: img.contentType
+      }));
+    }
+
+    // Add new uploaded images
+    if (req.files && req.files.length > 0) {
+      const newImages = req.files.map(file => ({
+        data: file.buffer,
+        contentType: file.mimetype
+      }));
+      updatedImages = [...updatedImages, ...newImages];
+    }
+
+    // Validate at least one image
+    if (updatedImages.length === 0) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Product must have at least one image' 
+      });
+    }
+
+    // Validate price if provided
+    let updatedPrice = product.price;
+    if (price) {
+      const parsedPrice = parseFloat(price);
+      if (isNaN(parsedPrice)) {
+        return res.status(400).json({ 
+          success: false, 
+          error: 'Price must be a valid number' 
+        });
+      }
+      updatedPrice = parsedPrice;
+    }
+
     const updatedProduct = await Product.findByIdAndUpdate(
       productId,
-      { name, description },
+      { 
+        description: description || product.description,
+        price: updatedPrice,
+        images: updatedImages
+      },
       { new: true }
     );
 
@@ -287,6 +238,64 @@ router.get('/:productId/offers', authenticate, async (req, res) => {
     res.json({ success: true, offerRequests: product.offerRequests });
   } catch (err) {
     console.error(err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+});
+
+// Accept an offer
+router.post('/offers/:offerId/accept', authenticate, async (req, res) => {
+  try {
+    const { productId } = req.body;
+    const { offerId } = req.params;
+
+    const product = await Product.findById(productId);
+    if (!product) {
+      return res.status(404).json({ success: false, error: 'Product not found' });
+    }
+
+    const offer = product.offerRequests.id(offerId);
+    if (!offer) {
+      return res.status(404).json({ success: false, error: 'Offer not found' });
+    }
+
+    // Update product status and buyer
+    product.status = 'sold';
+    product.buyer = offer.buyer;
+    product.transactionDate = new Date();
+
+    // Clear all offers as the product is now sold
+    product.offerRequests = [];
+
+    await product.save();
+
+    res.json({ success: true, message: 'Offer accepted successfully' });
+  } catch (err) {
+    console.error('Error accepting offer:', err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+});
+
+// Reject an offer
+router.post('/offers/:offerId/decline', authenticate, async (req, res) => {
+  try {
+    const { productId } = req.body;
+    const { offerId } = req.params;
+
+    const product = await Product.findById(productId);
+    if (!product) {
+      return res.status(404).json({ success: false, error: 'Product not found' });
+    }
+
+    // Remove the specific offer
+    product.offerRequests = product.offerRequests.filter(
+      offer => offer._id.toString() !== offerId
+    );
+
+    await product.save();
+
+    res.json({ success: true, message: 'Offer rejected successfully' });
+  } catch (err) {
+    console.error('Error rejecting offer:', err);
     res.status(500).json({ success: false, error: 'Server error' });
   }
 });
