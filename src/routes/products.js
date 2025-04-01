@@ -6,6 +6,22 @@ const authenticate = require('../middleware/auth');
 const multer = require('multer');
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
+const Notification = require('../models/notification');
+
+// Add this function at the top of the file
+async function createNotification(recipientId, type, productId, message) {
+  try {
+    const notification = new Notification({
+      recipient: recipientId,
+      type,
+      productId,
+      message
+    });
+    await notification.save();
+  } catch (err) {
+    console.error('Error creating notification:', err);
+  }
+}
 
 // Get all products
 router.get('/', authenticate, async (req, res) => {
@@ -167,6 +183,13 @@ router.put('/:productId', authenticate, upload.array('images', 5), async (req, r
       { new: true }
     );
 
+    await createNotification(
+      product.seller,
+      'product_update',
+      productId,
+      `Your product "${product.name}" has been updated`
+    );
+
     res.json({ 
       success: true, 
       message: 'Product updated successfully', 
@@ -268,6 +291,13 @@ router.post('/offers/:offerId/accept', authenticate, async (req, res) => {
 
     await product.save();
 
+    await createNotification(
+      offer.buyer,
+      'offer_response',
+      productId,
+      `Your offer for "${product.name}" has been accepted`
+    );
+
     res.json({ success: true, message: 'Offer accepted successfully' });
   } catch (err) {
     console.error('Error accepting offer:', err);
@@ -292,6 +322,13 @@ router.post('/offers/:offerId/decline', authenticate, async (req, res) => {
     );
 
     await product.save();
+
+    await createNotification(
+      offer.buyer,
+      'offer_response',
+      productId,
+      `Your offer for "${product.name}" has been declined`
+    );
 
     res.json({ success: true, message: 'Offer rejected successfully' });
   } catch (err) {
