@@ -81,41 +81,96 @@ router.get('/:productId', authenticate, async (req, res) => {
 router.post('/', authenticate, upload.array('images', 5), async (req, res) => {
   try {
     console.log("Received product submission:", req.body);
-    console.log("Files received:", req.files.length);
+    console.log("Files received:", req.files?.length);
 
-    const images = req.files.map(file => ({
-      data: file.buffer,
-      contentType: file.mimetype
-    }));
+    // Validate required fields
+    const { name, description, price, category } = req.body;
 
-    if (!req.body.name || !req.body.description || !req.body.price || !req.body.category) {
-      return res.status(400).json({ success: false, error: 'Missing required fields' });
+    if (!name || !description || !price || !category) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Please fill all required fields (name, description, price, category)' 
+      });
     }
 
-    const price = parseFloat(req.body.price);
-    if (isNaN(price)) {
-      return res.status(400).json({ success: false, error: 'Price must be a valid number' });
+    // Validate price
+    const parsedPrice = parseFloat(price);
+    if (isNaN(parsedPrice) || parsedPrice <= 0) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Please enter a valid price greater than 0' 
+      });
     }
 
-    const productData = {
-      name: req.body.name,
-      description: req.body.description,
-      images: images,
+    // Validate category
+    const validCategories = ['electronics', 'furniture', 'books', 'clothing', 'others'];
+    if (!validCategories.includes(category.toLowerCase())) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Invalid category' 
+      });
+    }
+
+    // Validate and process images
+    if (!req.files || req.files.length === 0) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Please upload at least one image' 
+      });
+    }
+
+    // Process and validate each image
+    const images = req.files.map(file => {
+      if (!file.buffer || !file.mimetype) {
+        throw new Error('Invalid image file');
+      }
+      return {
+        data: file.buffer,
+        contentType: file.mimetype
+      };
+    });
+
+    // Create and save product
+    const newProduct = new Product({
+      name: name.trim(),
+      description: description.trim(),
+      images,
       seller: req.user._id,
-      price: price,
-      category: req.body.category.toLowerCase()
-    };
+      price: parsedPrice,
+      category: category.toLowerCase(),
+      status: 'available'
+    });
 
-    const newProduct = new Product(productData);
     await newProduct.save();
 
-    req.user.soldProducts.push(newProduct._id);
-    await req.user.save();
+    // Update user's soldProducts array
+    await User.findByIdAndUpdate(
+      req.user._id,
+      { $push: { soldProducts: newProduct._id } }
+    );
 
-    res.status(201).json({ success: true, product: newProduct });
+    // Return success response with encoded images
+    const responseProduct = {
+      ...newProduct.toObject(),
+      images: images.map(img => ({
+        data: img.data.toString('base64'),
+        contentType: img.contentType
+      }))
+    };
+
+    res.status(201).json({
+      success: true,
+      message: 'Product created successfully',
+      product: responseProduct
+    });
+
   } catch (err) {
-    console.error("Error in POST /products:", err);
-    res.status(500).json({ success: false, error: 'Server error', message: err.message });
+    console.error("Error creating product:", err);
+    res.status(500).json({
+      success: false,
+      error: 'Error creating product',
+      message: err.message
+    });
   }
 });
 
