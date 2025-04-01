@@ -104,10 +104,10 @@ router.post('/', authenticate, upload.array('images', 5), async (req, res) => {
 });
 
 // Update a product
-router.put('/:productId', authenticate, async (req, res) => {
+router.put('/:productId', authenticate, upload.array('images', 5), async (req, res) => {
   try {
     const { productId } = req.params;
-    const { name, description } = req.body;
+    const { description, price, existingImages } = req.body;
 
     const product = await Product.findById(productId);
     if (!product) {
@@ -118,9 +118,52 @@ router.put('/:productId', authenticate, async (req, res) => {
       return res.status(403).json({ success: false, error: 'Access denied' });
     }
 
+    // Parse existing images JSON if provided
+    let updatedImages = [];
+    if (existingImages) {
+      updatedImages = JSON.parse(existingImages).map(img => ({
+        data: Buffer.from(img.data, 'base64'),
+        contentType: img.contentType
+      }));
+    }
+
+    // Add new uploaded images
+    if (req.files && req.files.length > 0) {
+      const newImages = req.files.map(file => ({
+        data: file.buffer,
+        contentType: file.mimetype
+      }));
+      updatedImages = [...updatedImages, ...newImages];
+    }
+
+    // Validate at least one image
+    if (updatedImages.length === 0) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Product must have at least one image' 
+      });
+    }
+
+    // Validate price if provided
+    let updatedPrice = product.price;
+    if (price) {
+      const parsedPrice = parseFloat(price);
+      if (isNaN(parsedPrice)) {
+        return res.status(400).json({ 
+          success: false, 
+          error: 'Price must be a valid number' 
+        });
+      }
+      updatedPrice = parsedPrice;
+    }
+
     const updatedProduct = await Product.findByIdAndUpdate(
       productId,
-      { name, description },
+      { 
+        description: description || product.description,
+        price: updatedPrice,
+        images: updatedImages
+      },
       { new: true }
     );
 
