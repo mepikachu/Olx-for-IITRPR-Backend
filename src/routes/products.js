@@ -242,6 +242,51 @@ router.get('/:productId/offers', authenticate, async (req, res) => {
   }
 });
 
+// Make an offer on a product
+router.post('/:productId/offers', authenticate, async (req, res) => {
+  try {
+    const { productId } = req.params;
+    const { offerPrice } = req.body;
+    
+    if (!offerPrice || isNaN(offerPrice)) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Valid offer price is required' 
+      });
+    }
+
+    const product = await Product.findById(productId);
+    if (!product) {
+      return res.status(404).json({ 
+        success: false, 
+        error: 'Product not found' 
+      });
+    }
+
+    // Remove any existing offer from this user
+    product.offerRequests = product.offerRequests.filter(
+      offer => offer.buyer.toString() !== req.user._id.toString()
+    );
+
+    // Add the new offer
+    product.offerRequests.push({
+      buyer: req.user._id,
+      offerPrice: offerPrice
+    });
+
+    await product.save();
+
+    res.json({
+      success: true,
+      hasOffer: true,
+      message: 'Offer submitted successfully'
+    });
+  } catch (err) {
+    console.error('Error making offer:', err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+});
+
 // Accept an offer
 router.post('/offers/:offerId/accept', authenticate, async (req, res) => {
   try {
@@ -296,6 +341,50 @@ router.post('/offers/:offerId/decline', authenticate, async (req, res) => {
     res.json({ success: true, message: 'Offer rejected successfully' });
   } catch (err) {
     console.error('Error rejecting offer:', err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+});
+
+// Make an offer (fix the route)
+router.post('/offers', authenticate, async (req, res) => {
+  try {
+    const { productId, offerPrice } = req.body;
+    
+    if (!productId || !offerPrice || isNaN(offerPrice)) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Product ID and valid offer price are required' 
+      });
+    }
+
+    const product = await Product.findById(productId);
+    if (!product) {
+      return res.status(404).json({ 
+        success: false, 
+        error: 'Product not found' 
+      });
+    }
+
+    // Remove any existing offer from this user
+    product.offerRequests = product.offerRequests.filter(
+      offer => offer.buyer.toString() !== req.user._id.toString()
+    );
+
+    // Add the new offer
+    product.offerRequests.push({
+      buyer: req.user._id,
+      offerPrice: offerPrice
+    });
+
+    await product.save();
+
+    res.json({
+      success: true,
+      hasOffer: true,
+      message: 'Offer submitted successfully'
+    });
+  } catch (err) {
+    console.error('Error making offer:', err);
     res.status(500).json({ success: false, error: 'Server error' });
   }
 });
