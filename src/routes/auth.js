@@ -6,6 +6,7 @@ const multer = require('multer');
 const User = require('../models/user');
 const Verification = require('../models/verification.js');
 const authenticate = require('../middleware/auth');
+const nodemailer = require('nodemailer');
 
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
@@ -74,6 +75,28 @@ router.post('/login', upload.none(), async (req, res) => {
     res.status(500).json({ success: false, error: 'Server error', message: err.message });
   }
 });
+
+const sendEmail = async ({ to, subject, text, html }) => {
+  // Create a transporter
+  const transporter = nodemailer.createTransport({
+    service: 'gmail', // or use SMTP details
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASSWORD
+    }
+  });
+
+  // Send mail
+  const info = await transporter.sendMail({
+    from: `"OLX for IITRPR" <${process.env.EMAIL_USER}>`,
+    to,
+    subject,
+    text,
+    html: html || text
+  });
+
+  return info;
+};
 
 router.post('/send-otp', async (req, res) => {
   try {
