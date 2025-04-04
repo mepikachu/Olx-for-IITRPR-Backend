@@ -27,24 +27,6 @@ router.post('/', auth, async (req, res) => {
       });
     }
 
-    // Validate reportedUserId format
-    if (!mongoose.Types.ObjectId.isValid(reportedUserId)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid user ID format'
-      });
-    }
-
-    // Validate conversationId if includeChat is true
-    if (includeChat && conversationId) {
-      if (!mongoose.Types.ObjectId.isValid(conversationId)) {
-        return res.status(400).json({
-          success: false,
-          message: 'Invalid conversation ID format'
-        });
-      }
-    }
-
     const report = new Report({
       reporter: req.user.id,
       reportedUser: reportedUserId,
@@ -108,13 +90,6 @@ router.patch('/admin/reports/:reportId', [auth, isAdmin], async (req, res) => {
     const { reportId } = req.params;
     const { status, adminNotes } = req.body;
     
-    if (!mongoose.Types.ObjectId.isValid(reportId)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid report ID format'
-      });
-    }
-    
     const report = await Report.findById(reportId);
     if (!report) {
       return res.status(404).json({ 
@@ -151,13 +126,6 @@ router.get('/admin/reports/:reportId/chat', [auth, isAdmin], async (req, res) =>
   try {
     const { reportId } = req.params;
     
-    if (!mongoose.Types.ObjectId.isValid(reportId)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid report ID format'
-      });
-    }
-    
     // Find the report
     const report = await Report.findById(reportId);
     if (!report || !report.includeChat || !report.conversationId) {
@@ -167,10 +135,8 @@ router.get('/admin/reports/:reportId/chat', [auth, isAdmin], async (req, res) =>
       });
     }
 
-    // Import Message model
-    const Message = require('../models/message');
-    
     // Fetch the messages for this conversation
+    const Message = require('../models/message');
     const messages = await Message.find({ conversation: report.conversationId })
       .sort({ createdAt: 1 })
       .populate('sender', 'name email');
