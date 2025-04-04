@@ -17,7 +17,7 @@ const volunteerRoutes = require('./routes/volunteers');
 const donationRoutes = require('./routes/donations');
 const blockRoutes = require('./routes/blockRoutes');
 const reportRoutes = require('./routes/reportRoutes');
-const notificationRoutes = require('./routes/notifications');
+const notificationRoutes = require('./routes/notifications');  // Make sure this is added
 
 const app = express();
 
@@ -42,6 +42,7 @@ app.use('/api/volunteer-requests', volunteerRoutes);
 app.use('/api/donations', donationRoutes);
 app.use('/api/users', blockRoutes);
 app.use('/api/users', reportRoutes);
+app.use('/api/notifications', notificationRoutes);  // Add this line to register notifications route
 
 // Error handling
 app.use(errorHandler);

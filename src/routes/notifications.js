@@ -5,11 +5,14 @@ const authenticate = require('../middleware/auth');
 
 router.get('/', authenticate, async (req, res) => {
   try {
+    console.log('User ID:', req.user._id); // Debug log
     const notifications = await Notification.find({ 
       userId: req.user._id 
     })
     .sort({ createdAt: -1 })
     .populate('productId', 'name');
+
+    console.log('Found notifications:', notifications); // Debug log
 
     res.json({ 
       success: true, 
