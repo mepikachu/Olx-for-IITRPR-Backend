@@ -5,14 +5,25 @@ const Report = require('../models/report');
 const auth = require('../middleware/auth');
 const isAdmin = require('../middleware/isAdmin');
 
-// Create new report
+// Update the base route handler to properly handle reports
 router.post('/', auth, async (req, res) => {
   try {
     const { reportedUserId, reason, details, includeChat, conversationId } = req.body;
     
     // Prevent self-reporting
     if (req.user.id === reportedUserId) {
-      return res.status(400).json({ message: 'You cannot report yourself' });
+      return res.status(400).json({ 
+        success: false,
+        message: 'You cannot report yourself' 
+      });
+    }
+
+    // Validate required fields
+    if (!reportedUserId || !reason) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Missing required fields' 
+      });
     }
     
     const report = new Report({
@@ -21,19 +32,20 @@ router.post('/', auth, async (req, res) => {
       reason,
       details,
       includeChat: includeChat || false,
-      conversationId: includeChat ? conversationId : null
+      conversationId: includeChat ? conversationId : null,
+      status: 'pending'
     });
     
     await report.save();
     res.status(201).json({ 
       success: true,
-      message: 'Report submitted successfully'
+      message: 'Report submitted successfully' 
     });
   } catch (error) {
     console.error('Create report error:', error);
     res.status(500).json({ 
       success: false,
-      message: 'Server error'
+      message: 'Server error' 
     });
   }
 });
