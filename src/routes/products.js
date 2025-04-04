@@ -108,7 +108,7 @@ router.post('/', authenticate, upload.array('images', 5), async (req, res) => {
 router.put('/:productId', authenticate, upload.array('images', 5), async (req, res) => {
   try {
     const { productId } = req.params;
-    const { description, price, existingImages } = req.body;
+    const { description, price, existingImages, clearOffers } = req.body;
 
     const product = await Product.findById(productId);
     if (!product) {
@@ -137,52 +137,32 @@ router.put('/:productId', authenticate, upload.array('images', 5), async (req, r
       updatedImages = [...updatedImages, ...newImages];
     }
 
-    // Validate at least one image
-    if (updatedImages.length === 0) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'Product must have at least one image' 
-      });
-    }
-
-    // Validate price if provided
-    let updatedPrice = product.price;
-    if (price) {
-      const parsedPrice = parseFloat(price);
-      if (isNaN(parsedPrice)) {
-        return res.status(400).json({ 
-          success: false, 
-          error: 'Price must be a valid number' 
+    // Clear offers if requested
+    if (clearOffers === 'true') {
+      // Notify users who have made offers before clearing them
+      for (const offer of product.offerRequests) {
+        await Notification.create({
+          userId: offer.buyer,
+          type: 'offer_cancelled',
+          message: `Your offer for ${product.name} was cancelled due to product updates`,
+          productId: product._id
         });
       }
-      updatedPrice = parsedPrice;
+      // Clear all offers
+      product.offerRequests = [];
     }
 
-    const updatedProduct = await Product.findByIdAndUpdate(
-      productId,
-      { 
-        description: description || product.description,
-        price: updatedPrice,
-        images: updatedImages
-      },
-      { new: true }
-    );
+    // Update product fields
+    product.description = description || product.description;
+    product.price = price ? parseFloat(price) : product.price;
+    product.images = updatedImages;
 
-    // Notify users who have made offers
-    const offeredUsers = product.offerRequests.map(offer => offer.buyer);
-    for (const userId of offeredUsers) {
-      await Notification.create({
-        userId,
-        type: 'product_updated',
-        message: `A product you made an offer on (${product.name}) has been updated`,
-        productId: product._id
-      });
-    }
+    await product.save();
 
     res.json({ 
       success: true, 
       message: 'Product updated successfully', 
-      product: updatedProduct 
+      product: product 
     });
   } catch (err) {
     console.error('Update product error:', err);
