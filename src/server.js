@@ -9,6 +9,7 @@ const errorHandler = require('./middleware/error');
 const authenticate = require('./middleware/auth');
 
 // Import routes
+const adminRoutes = require('./routes/adminRoutes');
 const authRoutes = require('./routes/auth');
 const productRoutes = require('./routes/products');
 const conversationRoutes = require('./routes/conversations');
@@ -17,7 +18,7 @@ const volunteerRoutes = require('./routes/volunteers');
 const donationRoutes = require('./routes/donations');
 const blockRoutes = require('./routes/blockRoutes');
 const reportRoutes = require('./routes/reportRoutes');
-const notificationRoutes = require('./routes/notifications');  // Make sure this is added
+const notificationRoutes = require('./routes/notifications');
 
 const app = express();
 
