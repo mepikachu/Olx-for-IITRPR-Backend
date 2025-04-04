@@ -139,15 +139,21 @@ router.put('/:productId', authenticate, upload.array('images', 5), async (req, r
 
     // Clear offers if requested
     if (clearOffers === 'true') {
-      // Notify users who have made offers before clearing them
-      for (const offer of product.offerRequests) {
+      // Get unique buyer IDs before clearing offers
+      const uniqueBuyers = [...new Set(product.offerRequests.map(offer => 
+        offer.buyer.toString()
+      ))];
+
+      // Create notifications for unique buyers
+      for (const buyerId of uniqueBuyers) {
         await Notification.create({
-          userId: offer.buyer,
+          userId: buyerId,
           type: 'offer_cancelled',
           message: `Your offer for ${product.name} was cancelled due to product updates`,
           productId: product._id
         });
       }
+
       // Clear all offers
       product.offerRequests = [];
     }
