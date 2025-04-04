@@ -40,6 +40,9 @@ const ProductSchema = new mongoose.Schema({
     ref: 'User'
   },
   transactionDate: Date,
+  transactionPrice: {
+    type: Number
+  },
   offerRequests: [{
     offerPrice: Number,
     buyer: {

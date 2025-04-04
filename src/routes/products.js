@@ -25,9 +25,7 @@ router.get('/my-purchases', authenticate, async (req, res) => {
         data: img.data?.toString('base64'),
         contentType: img.contentType
       })) || [],
-      transactionPrice: product.offerRequests.find(
-        offer => offer.buyer.toString() === req.user._id.toString()
-      )?.offerPrice || product.price
+      price: product.transactionPrice || product.price
     }));
 
     res.json({ success: true, products: formattedProducts });
@@ -346,6 +344,7 @@ router.post('/offers/:offerId/accept', authenticate, async (req, res) => {
       product.status = 'sold';
       product.buyer = offer.buyer;
       product.transactionDate = new Date();
+      product.transactionPrice = offer.offerPrice;
       product.offerRequests = [];
     }
 
