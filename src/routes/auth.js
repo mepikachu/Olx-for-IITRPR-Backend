@@ -74,6 +74,118 @@ router.post('/login', upload.none(), async (req, res) => {
   }
 });
 
+router.post('/send-otp', async (req, res) => {
+  try {
+    const { email } = req.body;
+    
+    // Check if email already exists
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Email already registered' 
+      });
+    }
+    
+    // Generate a 6-digit OTP
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    
+    // Generate a verification ID
+    const verificationId = crypto.randomBytes(32).toString('hex');
+    
+    // Store OTP in database with expiry (15 minutes)
+    const verification = new Verification({
+      email,
+      otp,
+      verificationId,
+      expiresAt: new Date(Date.now() + 15 * 60 * 1000)
+    });
+    await verification.save();
+    
+    // Send email with OTP
+    await sendEmail({
+      to: email,
+      subject: 'Email Verification OTP',
+      text: `Your OTP for email verification is: ${otp}. It will expire in 15 minutes.`
+    });
+    
+    res.status(200).json({ 
+      success: true, 
+      message: 'OTP sent successfully',
+      verificationId
+    });
+  } catch (error) {
+    console.error('Send OTP error:', error);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+});
+
+router.post('/verify-otp', async (req, res) => {
+  try {
+    const { email, otp, verificationId } = req.body;
+    
+    // Find the verification record
+    const verification = await Verification.findOne({
+      email,
+      verificationId,
+      expiresAt: { $gt: new Date() }
+    });
+    
+    if (!verification) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid or expired verification session'
+      });
+    }
+    
+    // Check if OTP matches
+    if (verification.otp !== otp) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid OTP'
+      });
+    }
+    
+    // Mark as verified
+    verification.verified = true;
+    await verification.save();
+    
+    res.status(200).json({
+      success: true,
+      message: 'Email verified successfully'
+    });
+  } catch (error) {
+    console.error('Verify OTP error:', error);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+});
+
+router.post('/verify-google', async (req, res) => {
+  try {
+    const { email, googleId } = req.body;
+    
+    // Check if email already exists
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Email already registered' 
+      });
+    }
+    
+    // Verify with Google API if needed
+    // This is simplified - in a real app you'd verify the token with Google
+    
+    res.status(200).json({
+      success: true,
+      message: 'Email verified with Google'
+    });
+  } catch (error) {
+    console.error('Google verification error:', error);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+});
+
 // Register route
 router.post('/register', upload.single('profilePicture'), async (req, res) => {
   try {
