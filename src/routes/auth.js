@@ -4,6 +4,7 @@ const bcrypt = require('bcrypt');
 const crypto = require('crypto');
 const multer = require('multer');
 const User = require('../models/user');
+const Verification = require('../models/verfication.js');
 const authenticate = require('../middleware/auth');
 
 const storage = multer.memoryStorage();
