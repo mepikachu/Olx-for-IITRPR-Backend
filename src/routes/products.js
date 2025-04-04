@@ -220,7 +220,8 @@ router.get('/:productId/check-offer', authenticate, async (req, res) => {
     res.json({
       success: true,
       hasOffer: !!existingOffer,
-      offerAmount: existingOffer ? existingOffer.offerPrice : null
+      offerAmount: existingOffer ? existingOffer.offerPrice : null,
+      offerStatus: existingOffer ? existingOffer.status : null  // Add this line
     });
   } catch (err) {
     res.status(500).json({ success: false, error: 'Server error' });
