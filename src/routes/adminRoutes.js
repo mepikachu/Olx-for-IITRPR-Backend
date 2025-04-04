@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
 const isAdmin = require('../middleware/isAdmin');
+const authenticate = require('../middleware/auth');
 
 // Import your models
 const User = require('../models/user');
@@ -14,7 +15,7 @@ const BlockList = require('../models/blockList');
 const Verification = require('../models/verification');
 
 // Apply isAdmin middleware to all routes
-router.use(isAdmin);
+router.use(authenticate, isAdmin);
 
 /*** DASHBOARD DATA ROUTES ***/
 
