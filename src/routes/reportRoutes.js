@@ -27,7 +27,7 @@ router.post('/', auth, async (req, res) => {
       });
     }
 
-    // Validate reportedUserId is a valid ObjectId
+    // Validate reportedUserId format
     if (!mongoose.Types.ObjectId.isValid(reportedUserId)) {
       return res.status(400).json({
         success: false,
@@ -36,11 +36,13 @@ router.post('/', auth, async (req, res) => {
     }
 
     // Validate conversationId if includeChat is true
-    if (includeChat && (!conversationId || !mongoose.Types.ObjectId.isValid(conversationId))) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid conversation ID'
-      });
+    if (includeChat && conversationId) {
+      if (!mongoose.Types.ObjectId.isValid(conversationId)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid conversation ID format'
+        });
+      }
     }
 
     const report = new Report({
@@ -165,7 +167,7 @@ router.get('/admin/reports/:reportId/chat', [auth, isAdmin], async (req, res) =>
       });
     }
 
-    // Ensure Message model is imported
+    // Import Message model
     const Message = require('../models/message');
     
     // Fetch the messages for this conversation
