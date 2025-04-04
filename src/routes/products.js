@@ -143,7 +143,7 @@ router.put('/:productId', authenticate, upload.array('images', 5), async (req, r
         for (const offer of product.offerRequests) {
           await Notification.create({
             userId: offer.buyer,
-            type: 'offer_cancelled',
+            type: 'product_updated', // Changed from 'offer_cancelled' to 'product_updated'
             message: `Your offer for ${product.name} was cancelled due to product updates`,
             productId: {
               _id: product._id,
