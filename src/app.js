@@ -1,17 +1,28 @@
 const express = require('express');
-const router = express.Router();
-const Notification = require('../models/notification');
-const authenticate = require('../middleware/auth');
+const bodyParser = require('body-parser');
+const mongoose = require('mongoose');
+const cors = require('cors');
+const app = express();
+const port = process.env.PORT || 5000;
 
-// Get all notifications for the authenticated user
-router.get('/', authenticate, async (req, res) => {
-  try {
-    const notifications = await Notification.find({ userId: req.user._id }).sort({ createdAt: -1 });
-    res.json({ success: true, notifications });
-  } catch (err) {
-    console.error('Error fetching notifications:', err);
-    res.status(500).json({ success: false, error: 'Server error' });
-  }
+const usersRouter = require('./routes/users');
+const postsRouter = require('./routes/posts');
+const commentsRouter = require('./routes/comments');
+const notificationsRouter = require('./routes/notifications');
+
+app.use(cors());
+app.use(bodyParser.json());
+
+mongoose.connect('mongodb://localhost:27017/olx', {
+  useNewUrlParser: true,
+  useUnifiedTopology: true,
 });
 
-module.exports = router;
+app.use('/api/users', usersRouter);
+app.use('/api/posts', postsRouter);
+app.use('/api/comments', commentsRouter);
+app.use('/api/notifications', notificationsRouter);
+
+app.listen(port, () => {
+  console.log(`Server is running on port: ${port}`);
+});
