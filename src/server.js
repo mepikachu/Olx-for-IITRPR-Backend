@@ -35,6 +35,7 @@ app.use(bodyParser.urlencoded({ extended: true, limit: '50mb' }));
 connectDB();
 
 // Use routes
+app.use('/api/admin/', adminRoutes);
 app.use('/api', authRoutes);
 app.use('/api/products', productRoutes);
 app.use('/api/conversations', conversationRoutes);
@@ -43,7 +44,7 @@ app.use('/api/volunteer-requests', volunteerRoutes);
 app.use('/api/donations', donationRoutes);
 app.use('/api/users', blockRoutes);
 app.use('/api/users', reportRoutes);
-app.use('/api/notifications', notificationRoutes);  // Add this line to register notifications route
+app.use('/api/notifications', notificationRoutes);
 
 // Error handling
 app.use(errorHandler);
