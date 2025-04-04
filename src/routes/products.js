@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const Product = require('../models/product');
 const User = require('../models/user');
+const Notification = require('../models/notification.js');
 const authenticate = require('../middleware/auth');
 const multer = require('multer');
 const storage = multer.memoryStorage();
