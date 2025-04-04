@@ -167,6 +167,17 @@ router.put('/:productId', authenticate, upload.array('images', 5), async (req, r
       { new: true }
     );
 
+    // Notify users who have made offers
+    const offeredUsers = product.offerRequests.map(offer => offer.buyer);
+    for (const userId of offeredUsers) {
+      await Notification.create({
+        userId,
+        type: 'product_updated',
+        message: `A product you made an offer on (${product.name}) has been updated`,
+        productId: product._id
+      });
+    }
+
     res.json({ 
       success: true, 
       message: 'Product updated successfully', 
@@ -300,20 +311,22 @@ router.post('/offers/:offerId/accept', authenticate, async (req, res) => {
     }
 
     const offer = product.offerRequests.id(offerId);
-    if (!offer) {
-      return res.status(404).json({ success: false, error: 'Offer not found' });
+    if (offer) {
+      // Create notification for the buyer
+      await Notification.create({
+        userId: offer.buyer,
+        type: 'offer_accepted',
+        message: `Your offer for ${product.name} was accepted!`,
+        productId: product._id
+      });
+      
+      product.status = 'sold';
+      product.buyer = offer.buyer;
+      product.transactionDate = new Date();
+      product.offerRequests = [];
     }
 
-    // Update product status and buyer
-    product.status = 'sold';
-    product.buyer = offer.buyer;
-    product.transactionDate = new Date();
-
-    // Clear all offers as the product is now sold
-    product.offerRequests = [];
-
     await product.save();
-
     res.json({ success: true, message: 'Offer accepted successfully' });
   } catch (err) {
     console.error('Error accepting offer:', err);
@@ -330,6 +343,20 @@ router.post('/offers/:offerId/decline', authenticate, async (req, res) => {
     const product = await Product.findById(productId);
     if (!product) {
       return res.status(404).json({ success: false, error: 'Product not found' });
+    }
+
+    const offer = product.offerRequests.find(
+      offer => offer._id.toString() === offerId
+    );
+
+    if (offer) {
+      // Create notification for the buyer
+      await Notification.create({
+        userId: offer.buyer,
+        type: 'offer_rejected',
+        message: `Your offer for ${product.name} was rejected`,
+        productId: product._id
+      });
     }
 
     // Remove the specific offer
