@@ -274,6 +274,14 @@ router.post('/:productId/offers', authenticate, async (req, res) => {
 
     await product.save();
 
+    // Create notification for product owner
+    await Notification.create({
+      userId: product.seller,
+      type: 'offer_received', // New notification type
+      message: `You received an offer of ₹${offerPrice} for ${product.name} from ${req.user.userName}`,
+      productId: product._id
+    });
+
     res.json({
       success: true,
       hasOffer: true,
