@@ -137,24 +137,23 @@ router.put('/:productId', authenticate, upload.array('images', 5), async (req, r
       updatedImages = [...updatedImages, ...newImages];
     }
 
-    // Clear offers if requested
-    if (clearOffers === 'true') {
-      // Get unique buyer IDs before clearing offers
-      const uniqueBuyers = [...new Set(product.offerRequests.map(offer => 
-        offer.buyer.toString()
-      ))];
-
-      // Create notifications for unique buyers
-      for (const buyerId of uniqueBuyers) {
-        await Notification.create({
-          userId: buyerId,
-          type: 'offer_cancelled',
-          message: `Your offer for ${product.name} was cancelled due to product updates`,
-          productId: product._id
-        });
+    // Get unique buyer IDs before clearing offers
+    if (clearOffers === 'true' && product.offerRequests.length > 0) {
+      try {
+        for (const offer of product.offerRequests) {
+          await Notification.create({
+            userId: offer.buyer,
+            type: 'offer_cancelled',
+            message: `Your offer for ${product.name} was cancelled due to product updates`,
+            productId: {
+              _id: product._id,
+              name: product.name
+            }
+          });
+        }
+      } catch (notifError) {
+        console.error('Notification creation error:', notifError);
       }
-
-      // Clear all offers
       product.offerRequests = [];
     }
 
