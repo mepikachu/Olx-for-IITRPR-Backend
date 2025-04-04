@@ -17,6 +17,7 @@ const volunteerRoutes = require('./routes/volunteers');
 const donationRoutes = require('./routes/donations');
 const blockRoutes = require('./routes/blockRoutes');
 const reportRoutes = require('./routes/reportRoutes');
+const notificationRoutes = require('./routes/notifications');
 
 const app = express();
 
