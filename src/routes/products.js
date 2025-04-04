@@ -8,6 +8,35 @@ const multer = require('multer');
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
+// Get user's purchased products (Move this route up, before other dynamic routes)
+router.get('/my-purchases', authenticate, async (req, res) => {
+  try {
+    const products = await Product.find({
+      buyer: req.user._id,
+      status: 'sold'
+    })
+    .populate('seller', 'userName')
+    .lean();
+
+    // Convert image buffers to base64 and format response
+    const formattedProducts = products.map(product => ({
+      ...product,
+      images: product.images?.map(img => ({
+        data: img.data?.toString('base64'),
+        contentType: img.contentType
+      })) || [],
+      transactionPrice: product.offerRequests.find(
+        offer => offer.buyer.toString() === req.user._id.toString()
+      )?.offerPrice || product.price
+    }));
+
+    res.json({ success: true, products: formattedProducts });
+  } catch (err) {
+    console.error('Error fetching purchases:', err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+});
+
 // Get all products
 router.get('/', authenticate, async (req, res) => {
   try {
@@ -407,35 +436,6 @@ router.post('/offers', authenticate, async (req, res) => {
     });
   } catch (err) {
     console.error('Error making offer:', err);
-    res.status(500).json({ success: false, error: 'Server error' });
-  }
-});
-
-// Get user's purchased products
-router.get('/my-purchases', authenticate, async (req, res) => {
-  try {
-    const products = await Product.find({
-      buyer: req.user._id,
-      status: 'sold'
-    })
-    .populate('seller', 'userName')
-    .lean();
-
-    // Convert image buffers to base64 and format response
-    const formattedProducts = products.map(product => ({
-      ...product,
-      images: product.images?.map(img => ({
-        data: img.data?.toString('base64'),
-        contentType: img.contentType
-      })) || [],
-      transactionPrice: product.offerRequests.find(
-        offer => offer.buyer.toString() === req.user._id.toString()
-      )?.offerPrice || product.price
-    }));
-
-    res.json({ success: true, products: formattedProducts });
-  } catch (err) {
-    console.error('Error fetching purchases:', err);
     res.status(500).json({ success: false, error: 'Server error' });
   }
 });
