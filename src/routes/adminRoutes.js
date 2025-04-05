@@ -1557,79 +1557,7 @@ router.get('/reports', async (req, res) => {
   }
 });
 
-// Update the existing patch route for reports to handle admin notes
-router.patch('/reports/:reportId', async (req, res) => {
-  try {
-    const { reportId } = req.params;
-    const { status, adminNotes, type } = req.body;
-    
-    if (!mongoose.Types.ObjectId.isValid(reportId)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid report ID format'
-      });
-    }
-    
-    let report;
-    
-    if (type === 'user') {
-      report = await UserReport.findById(reportId);
-      
-      if (!report) {
-        return res.status(404).json({
-          success: false,
-          message: 'User report not found'
-        });
-      }
-      
-      if (status) report.status = status;
-      if (adminNotes !== undefined) report.adminNotes = adminNotes;
-      if (status && status !== 'pending') {
-        report.reviewedAt = new Date();
-      }
-    } else if (type === 'product') {
-      report = await ProductReport.findById(reportId);
-      
-      if (!report) {
-        return res.status(404).json({
-          success: false,
-          message: 'Product report not found'
-        });
-      }
-      
-      if (status) report.status = status;
-      if (adminNotes !== undefined) report.adminNotes = adminNotes;
-      if (status && status !== 'pending') {
-        report.reviewedAt = new Date();
-      }
-    } else {
-      return res.status(400).json({
-        success: false,
-        message: 'Report type must be specified'
-      });
-    }
-    
-    await report.save();
-    
-    return res.status(200).json({
-      success: true,
-      message: `${type === 'user' ? 'User' : 'Product'} report updated successfully`,
-      report
-    });
-  } catch (error) {
-    console.error('Update report error:', error);
-    return res.status(500).json({
-      success: false,
-      message: 'Server error: ' + error.message
-    });
-  }
-});
-
-// Helper methods
-String.prototype.capitalize = function() {
-  return this.charAt(0).toUpperCase() + this.slice(1);
-};
-
+// Get specific report details
 router.get('/reports/:reportId', async (req, res) => {
   try {
     const { reportId } = req.params;
@@ -1647,8 +1575,18 @@ router.get('/reports/:reportId', async (req, res) => {
     if (type === 'user') {
       report = await UserReport.findById(reportId)
         .populate('reporter', 'userName email')
-        .populate('reportedUser', 'userName email')
-        .populate('conversation');
+        .populate('reportedUser', 'userName email');
+      
+      // Don't try to populate the conversationId directly
+      // Fetch the conversation separately if needed
+      if (report && report.sharedConversation && report.conversationId) {
+        const conversation = await Conversation.findById(report.conversationId);
+        if (conversation) {
+          // Add the conversation data to the report object but don't save to DB
+          report = report.toObject(); // Convert Mongoose document to plain object
+          report.conversationData = conversation;
+        }
+      }
     } else if (type === 'product') {
       report = await ProductReport.findById(reportId)
         .populate('reporter', 'userName email')
@@ -1831,11 +1769,7 @@ router.get('/reports/:reportId/messages', async (req, res) => {
     }
 
     // Find the report and check if chat is shared
-    const report = await UserReport.findById(reportId)
-    .populate({
-      path: 'conversation',
-      strictPopulate: false
-    });
+    const report = await UserReport.findById(reportId);
 
     if (!report) {
       return res.status(404).json({
@@ -1844,15 +1778,15 @@ router.get('/reports/:reportId/messages', async (req, res) => {
       });
     }
 
-    if (!report.sharedConversation || !report.conversation) {
+    if (!report.sharedConversation || !report.conversationId) {
       return res.status(400).json({
         success: false,
         message: 'Chat is not shared for this report',
       });
     }
 
-    // Fetch messages using the conversation ID
-    const messages = await Message.find({ conversation: report.conversation._id })
+    // Fetch messages using the conversationId
+    const messages = await Message.find({ conversation: report.conversationId })
       .populate('sender', 'userName')
       .sort({ createdAt: 1 });
 
@@ -1868,6 +1802,5 @@ router.get('/reports/:reportId/messages', async (req, res) => {
     });
   }
 });
-
 
 module.exports = router;
