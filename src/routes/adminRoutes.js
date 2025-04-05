@@ -1791,9 +1791,6 @@ router.get('/reports/:reportId/messages', async (req, res) => {
     if (!conversation) {
       return res.status(404).json({ success: false, error: 'Conversation not found' });
     }
-    if (!conversation.participants.some(p => p._id.toString() === req.user._id.toString())) {
-      return res.status(403).json({ success: false, error: 'Access denied' });
-    }
     
     res.json({ success: true, conversation });
 
