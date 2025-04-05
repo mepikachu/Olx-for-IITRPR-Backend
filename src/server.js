@@ -20,6 +20,7 @@ const blockRoutes = require('./routes/blockRoutes');
 const reportRoutes = require('./routes/reportRoutes');
 const notificationRoutes = require('./routes/notifications');
 
+
 const app = express();
 
 // Enhanced CORS configuration
@@ -43,7 +44,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/volunteer-requests', volunteerRoutes);
 app.use('/api/donations', donationRoutes);
 app.use('/api/users', blockRoutes);
-app.use('/api/users', reportRoutes);
+app.use('/api/reports', reportRoutes);
 app.use('/api/notifications', notificationRoutes);
 
 // Error handling
