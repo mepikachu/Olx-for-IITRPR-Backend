@@ -1557,6 +1557,137 @@ router.get('/reports', async (req, res) => {
   }
 });
 
+// Update the existing patch route for reports to handle admin notes
+router.patch('/reports/:reportId', async (req, res) => {
+  try {
+    const { reportId } = req.params;
+    const { status, adminNotes, type } = req.body;
+    
+    if (!mongoose.Types.ObjectId.isValid(reportId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid report ID format'
+      });
+    }
+    
+    let report;
+    
+    if (type === 'user') {
+      report = await UserReport.findById(reportId);
+      
+      if (!report) {
+        return res.status(404).json({
+          success: false,
+          message: 'User report not found'
+        });
+      }
+      
+      if (status) report.status = status;
+      if (adminNotes !== undefined) report.adminNotes = adminNotes;
+      if (status && status !== 'pending') {
+        report.reviewedAt = new Date();
+      }
+    } else if (type === 'product') {
+      report = await ProductReport.findById(reportId);
+      
+      if (!report) {
+        return res.status(404).json({
+          success: false,
+          message: 'Product report not found'
+        });
+      }
+      
+      if (status) report.status = status;
+      if (adminNotes !== undefined) report.adminNotes = adminNotes;
+      if (status && status !== 'pending') {
+        report.reviewedAt = new Date();
+      }
+    } else {
+      return res.status(400).json({
+        success: false,
+        message: 'Report type must be specified'
+      });
+    }
+    
+    await report.save();
+    
+    return res.status(200).json({
+      success: true,
+      message: `${type === 'user' ? 'User' : 'Product'} report updated successfully`,
+      report
+    });
+  } catch (error) {
+    console.error('Update report error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Server error: ' + error.message
+    });
+  }
+});
+
+// Helper methods
+String.prototype.capitalize = function() {
+  return this.charAt(0).toUpperCase() + this.slice(1);
+};
+
+router.get('/reports/:reportId', async (req, res) => {
+  try {
+    const { reportId } = req.params;
+    const { type } = req.query;
+    
+    if (!mongoose.Types.ObjectId.isValid(reportId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid report ID format'
+      });
+    }
+    
+    let report;
+    
+    if (type === 'user') {
+      report = await UserReport.findById(reportId)
+        .populate('reporter', 'userName email')
+        .populate('reportedUser', 'userName email')
+        .populate('conversation');
+    } else if (type === 'product') {
+      report = await ProductReport.findById(reportId)
+        .populate('reporter', 'userName email')
+        .populate('product');
+        
+      // Also populate the product seller information
+      if (report && report.product) {
+        await Product.populate(report.product, {
+          path: 'seller',
+          select: 'userName email'
+        });
+      }
+    } else {
+      return res.status(400).json({
+        success: false,
+        message: 'Report type must be specified'
+      });
+    }
+    
+    if (!report) {
+      return res.status(404).json({
+        success: false,
+        message: `${type.capitalize()} report not found`
+      });
+    }
+    
+    return res.status(200).json({
+      success: true,
+      report
+    });
+  } catch (error) {
+    console.error('Get report details error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Server error: ' + error.message
+    });
+  }
+});
+
 // Block user based on report
 router.post('/reports/:reportId/block-user', async (req, res) => {
   try {
@@ -1686,5 +1817,53 @@ router.delete('/reports/:reportId/delete-product', async (req, res) => {
     });
   }
 });
+
+// Fetch messages by report ID
+router.get('/reports/:reportId/messages', async (req, res) => {
+  try {
+    const { reportId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(reportId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid report ID format',
+      });
+    }
+
+    // Find the report and check if chat is shared
+    const report = await UserReport.findById(reportId).populate('conversation');
+
+    if (!report) {
+      return res.status(404).json({
+        success: false,
+        message: 'Report not found',
+      });
+    }
+
+    if (!report.sharedConversation || !report.conversation) {
+      return res.status(400).json({
+        success: false,
+        message: 'Chat is not shared for this report',
+      });
+    }
+
+    // Fetch messages using the conversation ID
+    const messages = await Message.find({ conversation: report.conversation._id })
+      .populate('sender', 'userName')
+      .sort({ createdAt: 1 });
+
+    return res.status(200).json({
+      success: true,
+      messages,
+    });
+  } catch (error) {
+    console.error('Error fetching messages by report ID:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Server error: ' + error.message,
+    });
+  }
+});
+
 
 module.exports = router;

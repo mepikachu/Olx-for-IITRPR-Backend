@@ -24,9 +24,16 @@ const productReportSchema = new mongoose.Schema({
     enum: ['pending', 'resolved', 'rejected'],
     default: 'pending'
   },
+  adminNotes: {
+    type: String,
+    default: ''
+  },
   createdAt: {
     type: Date,
     default: Date.now
+  },
+  reviewedAt: {
+    type: Date
   }
 });
 

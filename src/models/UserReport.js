@@ -35,7 +35,8 @@ const reportSchema = new mongoose.Schema({
     default: 'pending'
   },
   adminNotes: {
-    type: String
+    type: String,
+    default: ''
   },
   createdAt: {
     type: Date,
