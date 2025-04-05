@@ -1831,7 +1831,11 @@ router.get('/reports/:reportId/messages', async (req, res) => {
     }
 
     // Find the report and check if chat is shared
-    const report = await UserReport.findById(reportId).populate('conversation');
+    const report = await UserReport.findById(reportId)
+    .populate({
+      path: 'conversation',
+      strictPopulate: false
+    });
 
     if (!report) {
       return res.status(404).json({
