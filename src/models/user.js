@@ -10,6 +10,10 @@ const AddressSchema = new mongoose.Schema({
 });
 
 const UserSchema = new mongoose.Schema({
+  profilePicture: {
+    data: Buffer,
+    contentType: String
+  },
   userName: { 
     type: String, 
     required: true,
@@ -26,26 +30,18 @@ const UserSchema = new mongoose.Schema({
     trim: true,
     match: [/^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/, 'Invalid email']
   },
+  password: {
+    type: String,
+    required: true,
+    select: false
+  },
   phone: {
     type: String,
     required: true,
     unique: true,
     match: [/^[0-9]{10}$/, 'Invalid phone number']
   },
-  password: {
-    type: String,
-    required: true,
-    select: false
-  },
-  profilePicture: {
-    data: Buffer,
-    contentType: String
-  },
-  role: {
-    type: String,
-    enum: ['admin', 'volunteer', 'volunteer_pending', 'user'],
-    default: 'user'
-  },
+  
   address: AddressSchema,
   soldProducts: [{
     type: mongoose.Schema.Types.ObjectId,
@@ -58,6 +54,23 @@ const UserSchema = new mongoose.Schema({
   registrationDate: {
     type: Date,
     default: Date.now
+  },
+  role: {
+    type: String,
+    enum: ['admin', 'volunteer', 'volunteer_pending', 'user'],
+    default: 'user'
+  },
+  isBlocked: {
+    type: Boolean,
+    default: false
+  },
+  blockedAt: {
+    type: Date,
+    default: null
+  },
+  blockedReason: {
+    type: String,
+    default: null
   },
   lastSeen: {
     type: Date,

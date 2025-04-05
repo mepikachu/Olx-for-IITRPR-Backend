@@ -77,62 +77,6 @@ router.put('/me', authenticate, async (req, res) => {
   }
 });
 
-// Delete user account (admin only)
-router.delete('/:userId', authenticate, async (req, res) => {
-  if (req.user.role !== 'admin') {
-    return res.status(403).json({ 
-      success: false, 
-      error: 'Unauthorized: Admin access required' 
-    });
-  }
-
-  try {
-    const user = await User.findByIdAndDelete(req.params.userId);
-    if (!user) {
-      return res.status(404).json({ 
-        success: false, 
-        error: 'User not found' 
-      });
-    }
-
-    res.json({ 
-      success: true, 
-      message: 'User deleted successfully' 
-    });
-  } catch (err) {
-    console.error('Error deleting user:', err);
-    res.status(500).json({ success: false, error: 'Server error' });
-  }
-});
-
-// Get user by ID (admin only)
-router.get('/:userId', authenticate, async (req, res) => {
-  if (req.user.role !== 'admin') {
-    return res.status(403).json({ 
-      success: false, 
-      error: 'Unauthorized: Admin access required' 
-    });
-  }
-
-  try {
-    const user = await User.findById(req.params.userId)
-      .select('-password')
-      .populate('soldProducts purchasedProducts');
-    
-    if (!user) {
-      return res.status(404).json({ 
-        success: false, 
-        error: 'User not found' 
-      });
-    }
-
-    res.json({ success: true, user });
-  } catch (err) {
-    console.error('Error fetching user:', err);
-    res.status(500).json({ success: false, error: 'Server error' });
-  }
-});
-
 // Get user profile picture
 router.get('/profile-picture/:userId', async (req, res) => {
   try {

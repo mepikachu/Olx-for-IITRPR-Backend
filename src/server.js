@@ -17,9 +17,8 @@ const userRoutes = require('./routes/users');
 const volunteerRoutes = require('./routes/volunteers');
 const donationRoutes = require('./routes/donations');
 const blockRoutes = require('./routes/blockRoutes');
-const reportRoutes = require('./routes/reportRoutes_user');
 const notificationRoutes = require('./routes/notifications');
-const productReportRoutes = require('./routes/ProductReports.js'); // Fix the case sensitivity
+const reportRoutes = require('./routes/reports');
 
 const app = express();
 
@@ -44,9 +43,8 @@ app.use('/api/users', userRoutes);
 app.use('/api/volunteer-requests', volunteerRoutes);
 app.use('/api/donations', donationRoutes);
 app.use('/api/users', blockRoutes);
-app.use('/api/reports', reportRoutes);
 app.use('/api/notifications', notificationRoutes);
-app.use('/api/product-reports', productReportRoutes);
+app.use('/api/reports', reportRoutes);
 
 // Error handling
 app.use(errorHandler);

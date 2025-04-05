@@ -8,7 +8,8 @@ const authenticate = require('../middleware/auth');
 const User = require('../models/user');
 const Product = require('../models/product');
 const Donation = require('../models/donation');
-const Report = require('../models/report_user');
+const UserReport = require('../models/UserReport');
+const ProductReport = require('../models/ProductReport')
 const Conversation = require('../models/conversation');
 const Notification = require('../models/notification');
 const BlockList = require('../models/blockList');
@@ -41,7 +42,8 @@ router.get('/dashboard', async (req, res) => {
       soldProducts,
       totalDonations,
       newDonations,
-      pendingReports
+      pendingUserReports,
+      pendingProductReports
     ] = await Promise.all([
       User.countDocuments(),
       User.countDocuments({ registrationDate: { $gte: start, $lte: end } }),
@@ -50,8 +52,12 @@ router.get('/dashboard', async (req, res) => {
       Product.countDocuments({ status: 'sold' }),
       Donation.countDocuments(),
       Donation.countDocuments({ donationDate: { $gte: start, $lte: end } }),
-      Report.countDocuments({ status: 'pending' })
+      UserReport.countDocuments({ status: 'pending' }),
+      ProductReport.countDocuments({ status: 'pending' })
     ]);
+    
+    // Total pending reports
+    const pendingReports = pendingUserReports + pendingProductReports;
     
     // Get active users (users who have been seen in the last 30 days)
     const activeUsers = await User.countDocuments({
@@ -128,20 +134,32 @@ router.get('/dashboard', async (req, res) => {
       .populate('donatedBy', 'userName')
       .select('name donatedBy donationDate');
       
-    const recentReportsPromise = Report.find()
+    const recentUserReportsPromise = UserReport.find()
+      .sort({ createdAt: -1 })
+      .limit(3)
+      .populate('reporter', 'userName')
+      .select('reason reporter createdAt');
+
+    const recentProductReportsPromise = ProductReport.find()
       .sort({ createdAt: -1 })
       .limit(3)
       .populate('reporter', 'userName')
       .select('reason reporter createdAt');
     
-    const [recentUsers, recentProducts, recentSales, recentDonations, recentReports] = 
+    const [recentUsers, recentProducts, recentSales, recentDonations, recentUserReports, recentProductReports] = 
       await Promise.all([
         recentUsersPromise,
         recentProductsPromise,
         recentSalesPromise,
         recentDonationsPromise,
-        recentReportsPromise
+        recentUserReportsPromise,
+        recentProductReportsPromise
       ]);
+    
+    // Combine user and product reports
+    const recentReports = [...recentUserReports, ...recentProductReports]
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+      .slice(0, 3);
     
     // Format recent activity
     const recentActivity = [
@@ -750,20 +768,49 @@ router.get('/reports/stats', async (req, res) => {
     start.setHours(0, 0, 0, 0);
     end.setHours(23, 59, 59, 999);
     
-    // Get report counts
-    const totalReports = await Report.countDocuments();
-    const newReports = await Report.countDocuments({ 
+    // Get user report counts
+    const totalUserReports = await UserReport.countDocuments();
+    const newUserReports = await UserReport.countDocuments({ 
       createdAt: { $gte: start, $lte: end } 
     });
-    const resolvedReports = await Report.countDocuments({ 
+    const resolvedUserReports = await UserReport.countDocuments({ 
       status: { $in: ['resolved', 'dismissed'] } 
     });
-    const pendingReports = await Report.countDocuments({ 
+    const pendingUserReports = await UserReport.countDocuments({ 
       status: { $in: ['pending', 'reviewed'] } 
     });
     
-    // Get report categories distribution
-    const reportCategories = await Report.aggregate([
+    // Get product report counts
+    const totalProductReports = await ProductReport.countDocuments();
+    const newProductReports = await ProductReport.countDocuments({ 
+      createdAt: { $gte: start, $lte: end } 
+    });
+    const resolvedProductReports = await ProductReport.countDocuments({ 
+      status: { $in: ['resolved', 'dismissed'] } 
+    });
+    const pendingProductReports = await ProductReport.countDocuments({ 
+      status: { $in: ['pending', 'reviewed'] } 
+    });
+    
+    // Combine counts
+    const totalReports = totalUserReports + totalProductReports;
+    const newReports = newUserReports + newProductReports;
+    const resolvedReports = resolvedUserReports + resolvedProductReports;
+    const pendingReports = pendingUserReports + pendingProductReports;
+    
+    // Get user report categories distribution
+    const userReportCategories = await UserReport.aggregate([
+      {
+        $group: {
+          _id: "$reason",
+          count: { $sum: 1 }
+        }
+      },
+      { $sort: { count: -1 } }
+    ]);
+    
+    // Get product report categories distribution
+    const productReportCategories = await ProductReport.aggregate([
       {
         $group: {
           _id: "$reason",
@@ -774,18 +821,28 @@ router.get('/reports/stats', async (req, res) => {
     ]);
     
     // Format report categories
-    const formattedReportCategories = reportCategories.map(cat => ({
+    const formattedUserReportCategories = userReportCategories.map(cat => ({
       category: cat._id,
-      count: cat.count
+      count: cat.count,
+      type: 'user'
     }));
     
-    // Get monthly report trend
+    const formattedProductReportCategories = productReportCategories.map(cat => ({
+      category: cat._id,
+      count: cat.count,
+      type: 'product'
+    }));
+    
+    const formattedReportCategories = [...formattedUserReportCategories, ...formattedProductReportCategories]
+      .sort((a, b) => b.count - a.count);
+    
+    // Get monthly report trend for both types
     const twelveMonthsAgo = new Date();
     twelveMonthsAgo.setMonth(twelveMonthsAgo.getMonth() - 11);
     twelveMonthsAgo.setDate(1);
     twelveMonthsAgo.setHours(0, 0, 0, 0);
     
-    const monthlyReports = await Report.aggregate([
+    const userMonthlyReports = await UserReport.aggregate([
       {
         $match: {
           createdAt: { $gte: twelveMonthsAgo }
@@ -803,14 +860,60 @@ router.get('/reports/stats', async (req, res) => {
       { $sort: { "_id.year": 1, "_id.month": 1 } }
     ]);
     
-    // Format monthly reports data
-    const formattedMonthlyReports = monthlyReports.map(item => ({
+    const productMonthlyReports = await ProductReport.aggregate([
+      {
+        $match: {
+          createdAt: { $gte: twelveMonthsAgo }
+        }
+      },
+      {
+        $group: {
+          _id: { 
+            year: { $year: "$createdAt" },
+            month: { $month: "$createdAt" }
+          },
+          count: { $sum: 1 }
+        }
+      },
+      { $sort: { "_id.year": 1, "_id.month": 1 } }
+    ]);
+    
+    // Format and combine monthly reports data
+    const formattedUserMonthlyReports = userMonthlyReports.map(item => ({
       month: item._id.month,
+      year: item._id.year,
       count: item.count
     }));
     
+    const formattedProductMonthlyReports = productMonthlyReports.map(item => ({
+      month: item._id.month,
+      year: item._id.year,
+      count: item.count
+    }));
+    
+    // Merge the reports by month
+    const allMonths = new Set([
+      ...formattedUserMonthlyReports.map(r => `${r.year}-${r.month}`),
+      ...formattedProductMonthlyReports.map(r => `${r.year}-${r.month}`)
+    ]);
+    
+    const formattedMonthlyReports = Array.from(allMonths).map(yearMonth => {
+      const [year, month] = yearMonth.split('-').map(Number);
+      const userReport = formattedUserMonthlyReports.find(r => r.year === year && r.month === month);
+      const productReport = formattedProductMonthlyReports.find(r => r.year === year && r.month === month);
+      
+      return {
+        month,
+        year,
+        count: (userReport?.count || 0) + (productReport?.count || 0)
+      };
+    }).sort((a, b) => {
+      if (a.year !== b.year) return a.year - b.year;
+      return a.month - b.month;
+    });
+    
     // Get most reported users
-    const reportedUsers = await Report.aggregate([
+    const reportedUsers = await UserReport.aggregate([
       {
         $group: {
           _id: "$reportedUser",
@@ -836,8 +939,8 @@ router.get('/reports/stats', async (req, res) => {
       }
     ]);
     
-    // Calculate avg resolution time (if reviewedAt exists)
-    const resolutionTimeData = await Report.aggregate([
+    // Calculate avg resolution time for user reports
+    const userResolutionTimeData = await UserReport.aggregate([
       {
         $match: {
           status: 'resolved',
@@ -862,8 +965,48 @@ router.get('/reports/stats', async (req, res) => {
       }
     ]);
     
-    const avgResolutionTime = resolutionTimeData.length > 0 
-      ? Math.round(resolutionTimeData[0].avgResolutionTime * 10) / 10 
+    // Calculate avg resolution time for product reports
+    const productResolutionTimeData = await ProductReport.aggregate([
+      {
+        $match: {
+          status: 'resolved',
+          reviewedAt: { $exists: true }
+        }
+      },
+      {
+        $project: {
+          resolutionTime: {
+            $divide: [
+              { $subtract: ["$reviewedAt", "$createdAt"] },
+              1000 * 60 * 60 // Convert ms to hours
+            ]
+          }
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          avgResolutionTime: { $avg: "$resolutionTime" }
+        }
+      }
+    ]);
+    
+    // Calculate combined average resolution time
+    let avgResolutionTime = 0;
+    let totalResolvedWithTime = 0;
+    
+    if (userResolutionTimeData.length > 0) {
+      avgResolutionTime += userResolutionTimeData[0].avgResolutionTime;
+      totalResolvedWithTime++;
+    }
+    
+    if (productResolutionTimeData.length > 0) {
+      avgResolutionTime += productResolutionTimeData[0].avgResolutionTime;
+      totalResolvedWithTime++;
+    }
+    
+    avgResolutionTime = totalResolvedWithTime > 0 
+      ? Math.round((avgResolutionTime / totalResolvedWithTime) * 10) / 10 
       : 19.3; // Default fallback value
     
     // Mock resolution outcomes (since we don't have resolution types stored)
@@ -979,15 +1122,21 @@ router.get('/users/:id', async (req, res) => {
       .sort({ donationDate: -1 })
       .limit(10);
     
-    // Get reports filed by this user
-    const reportsFiled = await Report.find({ reporter: userId })
+    // Get reports filed by this user (both types)
+    const userReportsFiled = await UserReport.find({ reporter: userId })
       .select('reason reportedUser createdAt status')
       .populate('reportedUser', 'userName')
       .sort({ createdAt: -1 })
-      .limit(10);
+      .limit(5);
+      
+    const productReportsFiled = await ProductReport.find({ reporter: userId })
+      .select('reason product createdAt status')
+      .populate('product', 'name')
+      .sort({ createdAt: -1 })
+      .limit(5);
     
     // Get reports against this user
-    const reportsAgainst = await Report.find({ reportedUser: userId })
+    const reportsAgainst = await UserReport.find({ reportedUser: userId })
       .select('reason reporter createdAt status')
       .populate('reporter', 'userName')
       .sort({ createdAt: -1 })
@@ -1000,7 +1149,10 @@ router.get('/users/:id', async (req, res) => {
         products,
         purchasedProducts,
         donations,
-        reportsFiled,
+        reportsFiled: {
+          user: userReportsFiled,
+          product: productReportsFiled
+        },
         reportsAgainst
       }
     });
@@ -1165,16 +1317,10 @@ router.get('/products/:id', async (req, res) => {
       return res.status(404).json({ success: false, message: 'Product not found' });
     }
     
-    // Get related reports for this product (if any field links to product)
-    const reports = await Report.find({ 
-      $or: [
-        { product: productId },
-        { details: { $regex: productId, $options: 'i' } } // In case product ID is mentioned in details
-      ]
-    })
-    .populate('reporter', 'userName')
-    .populate('reportedUser', 'userName')
-    .sort({ createdAt: -1 });
+    // Get related reports for this product
+    const reports = await ProductReport.find({ product: productId })
+      .populate('reporter', 'userName')
+      .sort({ createdAt: -1 });
     
     res.status(200).json({
       success: true,
@@ -1184,61 +1330,6 @@ router.get('/products/:id', async (req, res) => {
   } catch (error) {
     console.error('Error fetching product details:', error);
     res.status(500).json({ success: false, message: 'Server error fetching product details' });
-  }
-});
-
-// Update product
-router.patch('/products/:id', async (req, res) => {
-  try {
-    const productId = req.params.id;
-    const { status, adminNotes, action } = req.body;
-    
-    // Find product
-    const product = await Product.findById(productId);
-    
-    if (!product) {
-      return res.status(404).json({ success: false, message: 'Product not found' });
-    }
-    
-    // Handle special actions
-    if (action) {
-      switch (action) {
-        case 'hide':
-          product.status = 'reserved'; // Using reserved as a proxy for hidden
-          break;
-          
-        case 'remove':
-          // Soft delete by changing status
-          product.status = 'sold'; // Using sold as a proxy for removed
-          break;
-          
-        default:
-          return res.status(400).json({ success: false, message: 'Invalid action' });
-      }
-    } else {
-      // Regular updates
-      if (status && ['available', 'sold', 'reserved'].includes(status)) {
-        product.status = status;
-      }
-      
-      // Add admin notes if provided
-      if (adminNotes) {
-        // Since we don't have an adminNotes field, we could add it to description
-        // This is just a placeholder - ideally you'd have a separate field
-        product.description += `\n\nAdmin Notes: ${adminNotes}`;
-      }
-    }
-    
-    await product.save();
-    
-    res.status(200).json({
-      success: true,
-      message: 'Product updated successfully',
-      product
-    });
-  } catch (error) {
-    console.error('Error updating product:', error);
-    res.status(500).json({ success: false, message: 'Server error updating product' });
   }
 });
 
@@ -1348,210 +1439,251 @@ router.get('/donations/:id', async (req, res) => {
   }
 });
 
-// Update donation
-router.patch('/donations/:id', async (req, res) => {
-  try {
-    const donationId = req.params.id;
-    const { status, collectedBy, action } = req.body;
-    
-    // Find donation
-    const donation = await Donation.findById(donationId);
-    
-    if (!donation) {
-      return res.status(404).json({ success: false, message: 'Donation not found' });
-    }
-    
-    // Handle special actions
-    if (action) {
-      switch (action) {
-        case 'remove':
-          await Donation.findByIdAndDelete(donationId);
-          return res.status(200).json({
-            success: true,
-            message: 'Donation removed successfully'
-          });
-          
-        default:
-          return res.status(400).json({ success: false, message: 'Invalid action' });
-      }
-    } else {
-      // Regular updates
-      if (status && ['available', 'collected'].includes(status)) {
-        donation.status = status;
-      }
-      
-      if (collectedBy) {
-        donation.collectedBy = collectedBy;
-      }
-    }
-    
-    await donation.save();
-    
-    res.status(200).json({
-      success: true,
-      message: 'Donation updated successfully',
-      donation
-    });
-  } catch (error) {
-    console.error('Error updating donation:', error);
-    res.status(500).json({ success: false, message: 'Server error updating donation' });
-  }
-});
-
-/*** REPORT MANAGEMENT ROUTES ***/
-
-// Get all reports with filtering and pagination
+// Get all reports with filtering (enhanced version)
 router.get('/reports', async (req, res) => {
   try {
     const { 
-      page = 1, 
-      limit = 20, 
+      type = 'all', 
       status, 
-      reason,
-      sortBy,
-      order = 'desc'
+      startDate, 
+      endDate, 
+      page = 1, 
+      limit = 10 
     } = req.query;
     
-    // Build query
-    const query = {};
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
+    const skip = (pageNum - 1) * limitNum;
     
-    if (status) {
+    let query = {};
+    
+    // Filter by status if provided
+    if (status && status !== 'all') {
       query.status = status;
     }
     
-    if (reason) {
-      query.reason = reason;
+    // Filter by date range if provided
+    if (startDate || endDate) {
+      query.createdAt = {};
+      if (startDate) {
+        query.createdAt.$gte = new Date(startDate);
+      }
+      if (endDate) {
+        query.createdAt.$lte = new Date(endDate);
+      }
     }
     
-    // Build sort object
-    let sort = {};
-    if (sortBy) {
-      sort[sortBy] = order === 'asc' ? 1 : -1;
-    } else {
-      sort = { createdAt: -1 }; // Default sort by creation date
+    let reports = [];
+    let totalCount = 0;
+    
+    // Get reports based on type
+    if (type === 'all' || type === 'both') {
+      // Get both user reports and product reports
+      const userReportsPromise = UserReport.find(query)
+        .populate('reporter', 'userName email')
+        .populate('reportedUser', 'userName email')
+        .sort({ createdAt: -1 });
+        
+      const productReportsPromise = ProductReport.find(query)
+        .populate('reporter', 'userName email')
+        .populate('product')
+        .sort({ createdAt: -1 });
+        
+      const userReportsCountPromise = UserReport.countDocuments(query);
+      const productReportsCountPromise = ProductReport.countDocuments(query);
+      
+      const [userReports, productReports, userReportsCount, productReportsCount] = 
+        await Promise.all([userReportsPromise, productReportsPromise, userReportsCountPromise, productReportsCountPromise]);
+      
+      // Combine and format reports
+      const combinedReports = [
+        ...userReports.map(report => ({
+          ...report.toObject(),
+          reportType: 'user'
+        })),
+        ...productReports.map(report => ({
+          ...report.toObject(),
+          reportType: 'product'
+        }))
+      ].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+      
+      reports = combinedReports.slice(skip, skip + limitNum);
+      totalCount = userReportsCount + productReportsCount;
+    } else if (type === 'user') {
+      // Get only user reports
+      reports = await UserReport.find(query)
+        .populate('reporter', 'userName email')
+        .populate('reportedUser', 'userName email')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limitNum);
+        
+      reports = reports.map(report => ({
+        ...report.toObject(),
+        reportType: 'user'
+      }));
+      
+      totalCount = await UserReport.countDocuments(query);
+    } else if (type === 'product') {
+      // Get only product reports
+      reports = await ProductReport.find(query)
+        .populate('reporter', 'userName email')
+        .populate('product')
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limitNum);
+        
+      reports = reports.map(report => ({
+        ...report.toObject(),
+        reportType: 'product'
+      }));
+      
+      totalCount = await ProductReport.countDocuments(query);
     }
     
-    // Execute query with pagination
-    const reports = await Report.find(query)
-      .populate('reporter', 'userName')
-      .populate('reportedUser', 'userName')
-      .sort(sort)
-      .skip((page - 1) * limit)
-      .limit(parseInt(limit));
-    
-    // Get total count
-    const totalReports = await Report.countDocuments(query);
-    
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       reports,
-      totalPages: Math.ceil(totalReports / parseInt(limit)),
-      currentPage: parseInt(page),
-      totalReports
+      totalPages: Math.ceil(totalCount / limitNum),
+      currentPage: pageNum,
+      totalReports: totalCount
     });
   } catch (error) {
-    console.error('Error fetching reports:', error);
-    res.status(500).json({ success: false, message: 'Server error fetching reports' });
+    console.error('Get reports error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Server error: ' + error.message
+    });
   }
 });
 
-// Get single report details
-router.get('/reports/:id', async (req, res) => {
+// Block user based on report
+router.post('/reports/:reportId/block-user', async (req, res) => {
   try {
-    const reportId = req.params.id;
+    const { reportId } = req.params;
+    const { type } = req.body;
     
-    // Find report
-    const report = await Report.findById(reportId)
-      .populate('reporter', 'userName email phone')
-      .populate('reportedUser', 'userName email phone');
-    
-    if (!report) {
-      return res.status(404).json({ success: false, message: 'Report not found' });
+    if (!mongoose.Types.ObjectId.isValid(reportId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid report ID format'
+      });
     }
     
-    // If conversation included, get chat logs
-    let conversation = null;
-    if (report.includeChat && report.conversationId) {
-      conversation = await Conversation.findById(report.conversationId)
-        .populate('participants', 'userName')
-        .select('messages participants');
-    }
+    let report;
+    let userToBlock;
     
-    res.status(200).json({
-      success: true,
-      report,
-      conversation
-    });
-  } catch (error) {
-    console.error('Error fetching report details:', error);
-    res.status(500).json({ success: false, message: 'Server error fetching report details' });
-  }
-});
-
-// Update report status
-router.patch('/reports/:id', async (req, res) => {
-  try {
-    const reportId = req.params.id;
-    const { status, adminNotes, action } = req.body;
-    
-    // Find report
-    const report = await Report.findById(reportId);
-    
-    if (!report) {
-      return res.status(404).json({ success: false, message: 'Report not found' });
-    }
-    
-    // Update report
-    if (status && ['pending', 'reviewed', 'resolved', 'dismissed'].includes(status)) {
-      report.status = status;
+    if (type === 'user') {
+      report = await UserReport.findById(reportId);
       
-      // Set review date if moving to reviewed or beyond
-      if (['reviewed', 'resolved', 'dismissed'].includes(status) && !report.reviewedAt) {
-        report.reviewedAt = new Date();
+      if (!report) {
+        return res.status(404).json({
+          success: false,
+          message: 'User report not found'
+        });
       }
+      
+      userToBlock = await User.findById(report.reportedUser);
+    } else if (type === 'product') {
+      report = await ProductReport.findById(reportId)
+        .populate('product');
+      
+      if (!report || !report.product) {
+        return res.status(404).json({
+          success: false,
+          message: 'Product report or associated product not found'
+        });
+      }
+      
+      // Get the product's seller
+      const product = await Product.findById(report.product);
+      userToBlock = await User.findById(product.seller);
+    } else {
+      return res.status(400).json({
+        success: false,
+        message: 'Report type must be specified'
+      });
     }
     
-    if (adminNotes) {
-      report.adminNotes = adminNotes;
+    if (!userToBlock) {
+      return res.status(404).json({
+        success: false,
+        message: 'User to block not found'
+      });
     }
     
-    // Handle special actions
-    if (action) {
-      switch (action) {
-        case 'blockUser':
-          // Create a new block entry
-          const newBlock = new BlockList({
-            blocker: report.reporter,
-            blocked: report.reportedUser
-          });
-          await newBlock.save();
-          
-          report.status = 'resolved';
-          report.adminNotes = (report.adminNotes || '') + '\nAction taken: User blocked';
-          break;
-          
-        case 'removeContent':
-          // This would depend on what content type is being reported
-          // For simplicity, we'll just update the report status
-          report.status = 'resolved';
-          report.adminNotes = (report.adminNotes || '') + '\nAction taken: Content removed';
-          break;
-          
-        default:
-          return res.status(400).json({ success: false, message: 'Invalid action' });
-      }
+    // Set user as blocked
+    userToBlock.isBlocked = true;
+    userToBlock.blockedAt = new Date();
+    userToBlock.blockedReason = `Blocked based on ${type} report (#${reportId})`;
+    await userToBlock.save();
+    
+    // Update report status
+    if (type === 'user') {
+      report.status = 'resolved';
+      report.adminNotes = report.adminNotes ? 
+        `${report.adminNotes}\nUser blocked on ${new Date().toISOString()}` : 
+        `User blocked on ${new Date().toISOString()}`;
+      report.reviewedAt = new Date();
+    } else if (type === 'product') {
+      report.status = 'resolved';
     }
     
     await report.save();
     
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
-      message: 'Report updated successfully',
+      message: 'User blocked successfully',
       report
     });
   } catch (error) {
-    console.error('Error updating report:', error);
-    res.status(500).json({ success: false, message: 'Server error updating report' });
+    console.error('Block user error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Server error: ' + error.message
+    });
+  }
+});
+
+// Delete product based on report
+router.delete('/reports/:reportId/delete-product', async (req, res) => {
+  try {
+    const { reportId } = req.params;
+    
+    if (!mongoose.Types.ObjectId.isValid(reportId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid report ID format'
+      });
+    }
+    
+    const report = await ProductReport.findById(reportId);
+    
+    if (!report) {
+      return res.status(404).json({
+        success: false,
+        message: 'Product report not found'
+      });
+    }
+    
+    // Delete the product
+    await Product.findByIdAndDelete(report.product);
+    
+    // Update report status
+    report.status = 'resolved';
+    await report.save();
+    
+    return res.status(200).json({
+      success: true,
+      message: 'Product deleted successfully',
+      report
+    });
+  } catch (error) {
+    console.error('Delete product error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Server error: ' + error.message
+    });
   }
 });
 
