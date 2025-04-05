@@ -17,9 +17,9 @@ const userRoutes = require('./routes/users');
 const volunteerRoutes = require('./routes/volunteers');
 const donationRoutes = require('./routes/donations');
 const blockRoutes = require('./routes/blockRoutes');
-const reportRoutes = require('./routes/reportRoutes');
+const reportRoutes = require('./routes/reportRoutes_user');
 const notificationRoutes = require('./routes/notifications');
-
+const productReportRoutes = require('./routes/productReports');
 
 const app = express();
 
@@ -46,6 +46,7 @@ app.use('/api/donations', donationRoutes);
 app.use('/api/users', blockRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/product-reports', productReportRoutes);
 
 // Error handling
 app.use(errorHandler);
