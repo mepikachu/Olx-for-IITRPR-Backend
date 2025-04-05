@@ -1579,7 +1579,7 @@ router.get('/reports/:reportId', async (req, res) => {
       
       // Don't try to populate the conversationId directly
       // Fetch the conversation separately if needed
-      if (report && report.sharedConversation && report.conversationId) {
+      if (report && report.includeChat && report.conversationId) {
         const conversation = await Conversation.findById(report.conversationId);
         if (conversation) {
           // Add the conversation data to the report object but don't save to DB
@@ -1778,7 +1778,7 @@ router.get('/reports/:reportId/messages', async (req, res) => {
       });
     }
 
-    if (!report.sharedConversation || !report.conversationId) {
+    if (!report.includeChat || !report.conversationId) {
       return res.status(400).json({
         success: false,
         message: 'Chat is not shared for this report',
