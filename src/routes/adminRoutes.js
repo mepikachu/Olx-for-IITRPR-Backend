@@ -1785,15 +1785,18 @@ router.get('/reports/:reportId/messages', async (req, res) => {
       });
     }
 
-    // Fetch messages using the conversationId
-    const messages = await Message.find({ conversation: report.conversationId })
-      .populate('sender', 'userName')
-      .sort({ createdAt: 1 });
-
-    return res.status(200).json({
-      success: true,
-      messages,
-    });
+    const conversation = await Conversation.findById(req.params.conversationId)
+      .populate('participants', 'userName');
+      
+    if (!conversation) {
+      return res.status(404).json({ success: false, error: 'Conversation not found' });
+    }
+    if (!conversation.participants.some(p => p._id.toString() === req.user._id.toString())) {
+      return res.status(403).json({ success: false, error: 'Access denied' });
+    }
+    
+    res.json({ success: true, conversation });
+    
   } catch (error) {
     console.error('Error fetching messages by report ID:', error);
     return res.status(500).json({
