@@ -1785,7 +1785,7 @@ router.get('/reports/:reportId/messages', async (req, res) => {
       });
     }
 
-    const conversation = await Conversation.findById(req.params.conversationId)
+    const conversation = await Conversation.findById(report.conversationId)
       .populate('participants', 'userName');
       
     if (!conversation) {
@@ -1796,7 +1796,7 @@ router.get('/reports/:reportId/messages', async (req, res) => {
     }
     
     res.json({ success: true, conversation });
-    
+
   } catch (error) {
     console.error('Error fetching messages by report ID:', error);
     return res.status(500).json({
