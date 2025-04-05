@@ -19,7 +19,7 @@ const donationRoutes = require('./routes/donations');
 const blockRoutes = require('./routes/blockRoutes');
 const reportRoutes = require('./routes/reportRoutes_user');
 const notificationRoutes = require('./routes/notifications');
-const productReportRoutes = require('./routes/productReports');
+const productReportRoutes = require('./routes/ProductReports.js'); // Fix the case sensitivity
 
 const app = express();
 
