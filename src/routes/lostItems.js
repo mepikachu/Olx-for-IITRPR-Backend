@@ -4,22 +4,22 @@ const auth = require('../middleware/auth');
 const multer = require('multer');
 const LostItem = require('../models/lostItem');
 
-// Configure multer for image upload
+// Multer configuration
 const storage = multer.memoryStorage();
 const upload = multer({
   storage: storage,
   limits: {
-    fileSize: 5 * 1024 * 1024, // 5MB max file size
-    files: 5 // Max 5 files
+    fileSize: 5 * 1024 * 1024, // 5MB
+    files: 5
   }
 });
 
 // Create a new lost item
 router.post('/', auth, upload.array('images', 5), async (req, res) => {
   try {
-    const { name, description, location } = req.body;
+    const { name, description } = req.body;
     
-    // Convert uploaded images to base64
+    // Convert images to base64
     const images = req.files.map(file => ({
       data: file.buffer.toString('base64'),
       contentType: file.mimetype
@@ -28,7 +28,6 @@ router.post('/', auth, upload.array('images', 5), async (req, res) => {
     const lostItem = new LostItem({
       name,
       description,
-      location,
       images,
       user: req.user._id
     });
@@ -51,8 +50,8 @@ router.post('/', auth, upload.array('images', 5), async (req, res) => {
 router.get('/', auth, async (req, res) => {
   try {
     const items = await LostItem.find()
-      .sort('-createdAt')
-      .populate('user', 'userName email');
+      .populate('user', 'userName email')
+      .sort('-createdAt');
 
     res.json({
       success: true,
@@ -103,7 +102,7 @@ router.patch('/:id', auth, async (req, res) => {
     }
 
     if (status) item.status = status;
-    if (isResolved !== undefined) item.isResolved = isResolved;
+    if (typeof isResolved === 'boolean') item.isResolved = isResolved;
 
     await item.save();
 

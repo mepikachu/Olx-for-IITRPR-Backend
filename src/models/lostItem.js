@@ -24,14 +24,6 @@ const lostItemSchema = new Schema({
     enum: ['lost', 'found'],
     default: 'lost'
   },
-  location: {
-    type: String,
-    required: true
-  },
-  date: {
-    type: Date,
-    default: Date.now
-  },
   isResolved: {
     type: Boolean,
     default: false
