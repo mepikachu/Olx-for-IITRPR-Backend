@@ -143,7 +143,7 @@ router.put('/:productId', authenticate, upload.array('images', 5), async (req, r
     }
 
     if (product.seller.toString() !== req.user._id.toString()) {
-      return res.status(403).json({ success: false, error: 'Access denied' });
+      return res.status(405).json({ success: false, error: 'Access denied' });
     }
 
     // Parse existing images JSON if provided
@@ -213,7 +213,7 @@ router.delete('/:productId', authenticate, async (req, res) => {
     }
 
     if (product.seller.toString() !== req.user._id.toString()) {
-      return res.status(403).json({ success: false, error: 'Access denied' });
+      return res.status(405).json({ success: false, error: 'Access denied' });
     }
 
     await Product.findByIdAndDelete(productId);

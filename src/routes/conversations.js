@@ -62,7 +62,7 @@ router.get('/:conversationId', authenticate, async (req, res) => {
     }
     
     if (!conversation.participants.some(p => p._id.toString() === req.user._id.toString())) {
-      return res.status(403).json({ success: false, error: 'Access denied' });
+      return res.status(405).json({ success: false, error: 'Access denied' });
     }
     
     res.json({ success: true, conversation });
@@ -85,7 +85,7 @@ router.get('/:conversationId/messages', authenticate, async (req, res) => {
     }
     
     if (!conversation.participants.some(p => p._id.toString() === req.user._id.toString())) {
-      return res.status(403).json({ success: false, error: 'Access denied' });
+      return res.status(405).json({ success: false, error: 'Access denied' });
     }
     
     let messages = [];
@@ -138,7 +138,7 @@ router.post('/:conversationId/messages', authenticate, async (req, res) => {
     }
     
     if (!conversation.participants.some(p => p._id.toString() === req.user._id.toString())) {
-      return res.status(403).json({ success: false, error: 'Access denied' });
+      return res.status(405).json({ success: false, error: 'Access denied' });
     }
     
     const currentMessageId = conversation.nextMessageId || 1;

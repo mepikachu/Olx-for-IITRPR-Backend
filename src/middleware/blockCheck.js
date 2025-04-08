@@ -19,7 +19,7 @@ const blockCheck = async (req, res, next) => {
     });
     
     if (blockExists) {
-      return res.status(403).json({ message: 'Action not allowed - user is blocked or has blocked you' });
+      return res.status(405).json({ message: 'Action not allowed - user is blocked or has blocked you' });
     }
     
     next();

@@ -10,7 +10,7 @@ const isAdmin = async (req, res, next) => {
     // Check if authenticated user is an admin
     const user = await User.findById(req.user._id);
     if (!user || user.role !== 'admin') {
-      return res.status(403).json({ success: false, message: 'Admin privileges required' });
+      return res.status(405).json({ success: false, message: 'Admin privileges required' });
     }
 
     next();

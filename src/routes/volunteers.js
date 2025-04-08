@@ -6,7 +6,7 @@ const authenticate = require('../middleware/auth');
 // Get pending volunteer requests (admin only)
 router.get('/', authenticate, async (req, res) => {
   if (req.user.role !== 'admin') {
-    return res.status(403).json({ success: false, error: 'Unauthorized' });
+    return res.status(405).json({ success: false, error: 'Unauthorized' });
   }
   try {
     const requests = await User.find({ role: 'volunteer_pending' }).select('-password');
@@ -19,7 +19,7 @@ router.get('/', authenticate, async (req, res) => {
 // Approve a volunteer request (admin only)
 router.post('/:userId/approve', authenticate, async (req, res) => {
   if (req.user.role !== 'admin') {
-    return res.status(403).json({ success: false, error: 'Unauthorized' });
+    return res.status(405).json({ success: false, error: 'Unauthorized' });
   }
   try {
     const user = await User.findById(req.params.userId);
@@ -37,7 +37,7 @@ router.post('/:userId/approve', authenticate, async (req, res) => {
 // Reject a volunteer request (admin only)
 router.post('/:userId/reject', authenticate, async (req, res) => {
   if (req.user.role !== 'admin') {
-    return res.status(403).json({ success: false, error: 'Unauthorized' });
+    return res.status(405).json({ success: false, error: 'Unauthorized' });
   }
   try {
     await User.findByIdAndDelete(req.params.userId);

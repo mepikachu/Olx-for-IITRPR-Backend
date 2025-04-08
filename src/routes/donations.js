@@ -72,7 +72,7 @@ router.post('/', authenticate, upload.array('images', 5), async (req, res) => {
 router.post('/:donationId/collect', authenticate, async (req, res) => {
   try {
     if (req.user.role !== 'volunteer') {
-      return res.status(403).json({
+      return res.status(405).json({
         success: false,
         error: 'Only volunteers can collect donations'
       });

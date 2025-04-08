@@ -6,7 +6,7 @@ const authenticate = require('../middleware/auth');
 // Get all users (admin only)
 router.get('/', authenticate, async (req, res) => {
   if (req.user.role !== 'admin') {
-    return res.status(403).json({ 
+    return res.status(405).json({ 
       success: false, 
       error: 'Unauthorized: Admin access required' 
     });
