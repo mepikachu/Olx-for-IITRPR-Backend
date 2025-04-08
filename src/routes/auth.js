@@ -14,45 +14,62 @@ const upload = multer({ storage: storage });
 // Login route
 router.post('/login', upload.none(), async (req, res) => {
   try {
-    const { identifier, password, authCookie: providedAuthCookie } = req.body;
+    // const { identifier, password, authCookie: providedAuthCookie } = req.body;
 
-    if (providedAuthCookie) {
-      const userByCookie = await User.findOne({ authCookie: providedAuthCookie }).select('+password');
-      if (userByCookie && userByCookie.authCookieExpires >= Date.now()) {
-        return res.json({
-          success: true,
-          message: "Login successful via auth cookie",
-          authCookie: userByCookie.authCookie,
-          user: {
-            id: userByCookie._id,
-            userName: userByCookie.userName,
-            email: userByCookie.email,
-            role: userByCookie.role
-          }
-        });
-      }
-      return res.status(401).json({ success: false, error: 'Invalid or expired auth cookie' });
-    }
+    // // 1) If the client already sent us an authCookie, try to log in via that
+    // if (providedAuthCookie) {
+    //   const userByCookie = await User.findOne({ authCookie: providedAuthCookie }).select('+password');
+    //   if (userByCookie && userByCookie.authCookieExpires >= Date.now()) {
+    //     return res.json({
+    //       success: true,
+    //       message: "Login successful via auth cookie",
+    //       authCookie: userByCookie.authCookie,
+    //       user: {
+    //         id: userByCookie._id,
+    //         userName: userByCookie.userName,
+    //         email: userByCookie.email,
+    //         role: userByCookie.role
+    //       }
+    //     });
+    //   }
+    //   return res.status(401).json({ success: false, error: 'Invalid or expired auth cookie' });
+    // }
 
+    const { identifier, password } = req.body;
+
+    // 2) Otherwise we need identifier + password
     if (!identifier || !password) {
       return res.status(400).json({ success: false, error: 'Identifier and password are required' });
     }
 
+    // 3) Look up the user by email or userName
     const user = await User.findOne({
       $or: [{ email: identifier }, { userName: identifier }]
-    }).select('+password');
+    }).select('+password authCookie authCookieExpires');
 
-    if (!user || !(await bcrypt.compare(password, user.password))) {
+    if (!user) {
       return res.status(401).json({ success: false, error: 'Invalid credentials' });
     }
 
-    const newAuthCookie = crypto.randomBytes(64).toString('hex');
-    user.authCookie = newAuthCookie;
-    user.authCookieCreated = new Date();
-    user.authCookieExpires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
-    await user.save();
+    // 4) Verify the password
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      return res.status(401).json({ success: false, error: 'Invalid credentials' });
+    }
 
-    res.cookie('authCookie', newAuthCookie, {
+    let authCookieToUse;
+    if (user.authCookie && user.authCookieExpires >= Date.now()) {
+      authCookieToUse = user.authCookie;
+    } else {
+      authCookieToUse = crypto.randomBytes(64).toString('hex');
+      user.authCookie = newAuthCookie;
+      user.authCookieCreated = new Date();
+      user.authCookieExpires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+      await user.save();
+    }
+
+    // Set it as an HTTP‑only cookie
+    res.cookie('authCookie', authCookieToUse, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
@@ -62,7 +79,7 @@ router.post('/login', upload.none(), async (req, res) => {
     res.json({
       success: true,
       message: "Login successful",
-      authCookie: newAuthCookie,
+      authCookie: authCookieToUse,
       user: {
         id: user._id,
         userName: user.userName,
