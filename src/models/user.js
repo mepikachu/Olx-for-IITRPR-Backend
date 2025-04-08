@@ -38,7 +38,7 @@ const UserSchema = new mongoose.Schema({
   phone: {
     type: String,
     required: true,
-    unique: true,
+    unique: false,
     match: [/^[0-9]{10}$/, 'Invalid phone number']
   },
   
