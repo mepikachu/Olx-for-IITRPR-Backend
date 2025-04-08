@@ -149,16 +149,21 @@ router.post('/send-register-otp', async (req, res) => {
 
 router.post('/send-reset-otp', async (req, res) => {
   try {
-    const { email } = req.body;
+    const { identifier } = req.body;
     if (!email) {
       return res.status(400).json({ success: false, error: 'Email is required' });
     }
 
     // Make sure the user exists
-    const user = await User.findOne({ email });
+    const user = await User.findOne({
+      $or: [{ email: identifier }, { userName: identifier }]
+    });
+
     if (!user) {
       return res.status(404).json({ success: false, error: 'No account with that email' });
     }
+
+    const email = user.email;
 
     // Delete any existing reset OTPs for this email
     await Verification.deleteMany({ email });
