@@ -17,7 +17,7 @@ const upload = multer({
 // Create a new lost item
 router.post('/', auth, upload.array('images', 5), async (req, res) => {
   try {
-    const { name, description } = req.body;
+    const { name, description, lastSeenLocation } = req.body;
     
     // Convert images to base64
     const images = req.files.map(file => ({
@@ -28,6 +28,7 @@ router.post('/', auth, upload.array('images', 5), async (req, res) => {
     const lostItem = new LostItem({
       name,
       description,
+      lastSeenLocation,
       images,
       user: req.user._id
     });
@@ -83,7 +84,65 @@ router.get('/my-items', auth, async (req, res) => {
   }
 });
 
+// Get a single lost item by ID
+router.get('/:id', auth, async (req, res) => {
+  try {
+    const item = await LostItem.findById(req.params.id)
+      .populate('user', 'userName email');
+
+    if (!item) {
+      return res.status(404).json({
+        success: false,
+        error: 'Item not found'
+      });
+    }
+
+    res.json({
+      success: true,
+      item
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 // Update lost item status
+router.patch('/:id/status', auth, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { status } = req.body;
+
+    const item = await LostItem.findOne({
+      _id: id,
+      user: req.user._id
+    });
+
+    if (!item) {
+      return res.status(404).json({
+        success: false,
+        error: 'Item not found or unauthorized'
+      });
+    }
+
+    item.status = status;
+    await item.save();
+
+    res.json({
+      success: true,
+      item
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// Update lost item status and resolution
 router.patch('/:id', auth, async (req, res) => {
   try {
     const { id } = req.params;

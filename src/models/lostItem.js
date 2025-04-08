@@ -10,6 +10,10 @@ const lostItemSchema = new Schema({
     type: String,
     required: true,
   },
+  lastSeenLocation: {
+    type: String,
+    required: true,
+  },
   images: [{
     data: String,
     contentType: String
