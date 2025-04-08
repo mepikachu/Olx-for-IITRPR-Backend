@@ -14,27 +14,6 @@ const upload = multer({ storage: storage });
 // Login route
 router.post('/login', upload.none(), async (req, res) => {
   try {
-    // const { identifier, password, authCookie: providedAuthCookie } = req.body;
-
-    // // 1) If the client already sent us an authCookie, try to log in via that
-    // if (providedAuthCookie) {
-    //   const userByCookie = await User.findOne({ authCookie: providedAuthCookie }).select('+password');
-    //   if (userByCookie && userByCookie.authCookieExpires >= Date.now()) {
-    //     return res.json({
-    //       success: true,
-    //       message: "Login successful via auth cookie",
-    //       authCookie: userByCookie.authCookie,
-    //       user: {
-    //         id: userByCookie._id,
-    //         userName: userByCookie.userName,
-    //         email: userByCookie.email,
-    //         role: userByCookie.role
-    //       }
-    //     });
-    //   }
-    //   return res.status(401).json({ success: false, error: 'Invalid or expired auth cookie' });
-    // }
-
     const { identifier, password } = req.body;
 
     // 2) Otherwise we need identifier + password
@@ -45,7 +24,7 @@ router.post('/login', upload.none(), async (req, res) => {
     // 3) Look up the user by email or userName
     const user = await User.findOne({
       $or: [{ email: identifier }, { userName: identifier }]
-    }).select('+password authCookie authCookieExpires');
+    }).select('+password userName email role authCookie authCookieExpires');
 
     if (!user) {
       return res.status(401).json({ success: false, error: 'Invalid credentials' });
