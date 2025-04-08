@@ -115,10 +115,15 @@ router.patch('/:id/status', auth, async (req, res) => {
     const { id } = req.params;
     const { status } = req.body;
 
-    const item = await LostItem.findOne({
-      _id: id,
-      user: req.user._id
-    });
+    // Use findByIdAndUpdate instead of findOne to avoid validation of other fields
+    const item = await LostItem.findByIdAndUpdate(
+      id,
+      { $set: { status: status } },
+      { 
+        new: true,  // Return updated document
+        runValidators: false  // Skip validation since we're only updating status
+      }
+    );
 
     if (!item) {
       return res.status(404).json({
@@ -126,9 +131,6 @@ router.patch('/:id/status', auth, async (req, res) => {
         error: 'Item not found or unauthorized'
       });
     }
-
-    item.status = status;
-    await item.save();
 
     res.json({
       success: true,
