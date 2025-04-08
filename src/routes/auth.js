@@ -150,8 +150,8 @@ router.post('/send-register-otp', async (req, res) => {
 router.post('/send-reset-otp', async (req, res) => {
   try {
     const { identifier } = req.body;
-    if (!email) {
-      return res.status(400).json({ success: false, error: 'Email is required' });
+    if (!identifier) {
+      return res.status(400).json({ success: false, error: 'Useranem or Email is required' });
     }
 
     // Make sure the user exists
