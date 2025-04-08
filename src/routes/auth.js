@@ -62,7 +62,7 @@ router.post('/login', upload.none(), async (req, res) => {
       authCookieToUse = user.authCookie;
     } else {
       authCookieToUse = crypto.randomBytes(64).toString('hex');
-      user.authCookie = newAuthCookie;
+      user.authCookie = authCookieToUse;
       user.authCookieCreated = new Date();
       user.authCookieExpires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
       await user.save();
