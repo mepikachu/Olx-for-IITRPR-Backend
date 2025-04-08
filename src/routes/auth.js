@@ -271,7 +271,7 @@ router.post('/register', upload.single('profilePicture'), async (req, res) => {
       expiresAt: { $gt: new Date() }
     });
 
-    if (!verification) {
+    if (!verification || !verification.verified) {
       return res.status(400).json({
         success: false,
         error: 'Invalid or expired verification session'
@@ -279,7 +279,6 @@ router.post('/register', upload.single('profilePicture'), async (req, res) => {
     }
 
     const email = verification.email;
-    await Verification.deleteMany({ email }); 
 
     const newUser = new User({
       userName,
@@ -311,6 +310,8 @@ router.post('/register', upload.single('profilePicture'), async (req, res) => {
       sameSite: 'strict',
       maxAge: 30 * 24 * 60 * 60 * 1000
     });
+
+    await Verification.deleteMany({ email }); 
     
     res.status(201).json({
       success: true,
@@ -345,17 +346,15 @@ router.post('/reset-password', async (req, res) => {
       verificationId,
       expiresAt: { $gt: new Date() }
     });
-    if (!verification) {
+
+    if (!verification || !verification.verified) {
       return res.status(400).json({
         success: false,
         error: 'Invalid or expired verification session'
       });
     }
 
-    const email = verification.email;
-
-    // Delete all reset OTPs for this email
-    await Verification.deleteMany({ email });
+    const email = verification.email;    
 
     // Update the user's password
     const user = await User.findOne({ email }).select('+password');
@@ -364,6 +363,9 @@ router.post('/reset-password', async (req, res) => {
     }
     user.password = newPassword;
     await user.save();
+
+    // Delete all reset OTPs for this email
+    await Verification.deleteMany({ email });
 
     res.status(200).json({
       success: true,
