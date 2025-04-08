@@ -19,6 +19,7 @@ const donationRoutes = require('./routes/donations');
 const blockRoutes = require('./routes/blockRoutes');
 const notificationRoutes = require('./routes/notifications');
 const reportRoutes = require('./routes/reports');
+const lostItemRoutes = require('./routes/lostItems');
 
 const app = express();
 
@@ -45,6 +46,7 @@ app.use('/api/donations', donationRoutes);
 app.use('/api/users', blockRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/reports', reportRoutes);
+app.use('/api/lost-items', lostItemRoutes);
 
 // Error handling
 app.use(errorHandler);
