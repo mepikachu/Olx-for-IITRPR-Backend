@@ -98,7 +98,7 @@ const sendEmail = async ({ to, subject, text, html }) => {
   return info;
 };
 
-router.post('/send-otp', async (req, res) => {
+router.post('/send-register-otp', async (req, res) => {
   try {
     const { email } = req.body;
     
@@ -110,12 +110,15 @@ router.post('/send-otp', async (req, res) => {
         error: 'Email already registered' 
       });
     }
+
+    // 2) Remove any existing OTPs for this email
+    await Verification.deleteMany({ email }); 
     
     // Generate a 6-digit OTP
     const otp = Math.floor(100000 + Math.random() * 900000).toString();
     
     // Generate a verification ID
-    const verificationId = crypto.randomBytes(32).toString('hex');
+    const verificationId = crypto.randomBytes(64).toString('hex');
     
     // Store OTP in database with expiry (15 minutes)
     const verification = new Verification({
@@ -144,13 +147,58 @@ router.post('/send-otp', async (req, res) => {
   }
 });
 
+router.post('/send-reset-otp', async (req, res) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ success: false, error: 'Email is required' });
+    }
+
+    // Make sure the user exists
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'No account with that email' });
+    }
+
+    // Delete any existing reset OTPs for this email
+    await Verification.deleteMany({ email });
+
+    // Generate 6‑digit OTP + verificationId
+    const otp = Math.floor(100000 + Math.random() * 900000).toString();
+    const verificationId = crypto.randomBytes(32).toString('hex');
+
+    // Save to Verification collection (expires in 15m)
+    await new Verification({
+      email,
+      otp,
+      verificationId,
+      expiresAt: new Date(Date.now() + 15 * 60 * 1000)
+    }).save();
+
+    // Email the OTP
+    await sendEmail({
+      to: email,
+      subject: 'Password Reset OTP',
+      text: `Your password reset OTP is: ${otp}. It expires in 15 minutes.`
+    });
+
+    res.status(200).json({
+      success: true,
+      message: 'OTP sent for password reset',
+      verificationId
+    });
+  } catch (err) {
+    console.error('send-reset-otp error:', err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+});
+
 router.post('/verify-otp', async (req, res) => {
   try {
-    const { email, otp, verificationId } = req.body;
+    const { otp, verificationId } = req.body;
     
     // Find the verification record
     const verification = await Verification.findOne({
-      email,
       verificationId,
       expiresAt: { $gt: new Date() }
     });
@@ -213,10 +261,24 @@ router.post('/verify-google', async (req, res) => {
 // Register route
 router.post('/register', upload.single('profilePicture'), async (req, res) => {
   try {
-    const { userName, email, phone, password, address, role } = req.body;
-    if (!userName || !email || !phone || !password) {
+    const { verificationId, userName, phone, password, address, role } = req.body;
+    if (!verificationId || !userName || !phone || !password) {
       return res.status(400).json({ success: false, error: 'All required fields missing' });
     }
+
+    const verification = await Verification.findOne({
+      verificationId,
+      expiresAt: { $gt: new Date() }
+    });
+
+    if (!verification || !verification.verified) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid or expired verification session'
+      });
+    }
+
+    const email = verification.email;
 
     const newUser = new User({
       userName,
@@ -248,6 +310,8 @@ router.post('/register', upload.single('profilePicture'), async (req, res) => {
       sameSite: 'strict',
       maxAge: 30 * 24 * 60 * 60 * 1000
     });
+
+    await Verification.deleteMany({ email }); 
     
     res.status(201).json({
       success: true,
@@ -268,6 +332,51 @@ router.post('/register', upload.single('profilePicture'), async (req, res) => {
     res.status(500).json({ success: false, error: 'Server error', message: err.message });
   }
 });
+
+// Reset password route
+router.post('/reset-password', async (req, res) => {
+  try {
+    const { verificationId, newPassword } = req.body;
+    if (!verificationId || !newPassword) {
+      return res.status(400).json({ success: false, error: 'All fields are required' });
+    }
+
+    // Find a matching, unexpired verification record
+    const verification = await Verification.findOne({
+      verificationId,
+      expiresAt: { $gt: new Date() }
+    });
+
+    if (!verification || !verification.verified) {
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid or expired verification session'
+      });
+    }
+
+    const email = verification.email;    
+
+    // Update the user's password
+    const user = await User.findOne({ email }).select('+password');
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
+    user.password = newPassword;
+    await user.save();
+
+    // Delete all reset OTPs for this email
+    await Verification.deleteMany({ email });
+
+    res.status(200).json({
+      success: true,
+      message: 'Password has been reset successfully'
+    });
+  } catch (err) {
+    console.error('reset-password error:', err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+});
+
 
 // Logout route
 router.post('/logout', authenticate, async (req, res) => {
