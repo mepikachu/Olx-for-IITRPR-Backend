@@ -335,21 +335,20 @@ router.post('/register', upload.single('profilePicture'), async (req, res) => {
 // Reset password route
 router.post('/reset-password', async (req, res) => {
   try {
-    const { verificationId, otp, newPassword } = req.body;
-    if (!verificationId || !otp || !newPassword) {
+    const { verificationId, newPassword } = req.body;
+    if (!verificationId || !newPassword) {
       return res.status(400).json({ success: false, error: 'All fields are required' });
     }
 
     // Find a matching, unexpired verification record
     const verification = await Verification.findOne({
       verificationId,
-      otp,
       expiresAt: { $gt: new Date() }
     });
     if (!verification) {
       return res.status(400).json({
         success: false,
-        error: 'Invalid or expired OTP/verification session'
+        error: 'Invalid or expired verification session'
       });
     }
 
@@ -359,7 +358,6 @@ router.post('/reset-password', async (req, res) => {
     await Verification.deleteMany({ email });
 
     // Update the user's password
-    // Note: your UserSchema pre('save') will hash it
     const user = await User.findOne({ email }).select('+password');
     if (!user) {
       return res.status(404).json({ success: false, error: 'User not found' });
