@@ -30,6 +30,15 @@ const authenticate = async (req, res, next) => {
     await user.save();
     req.user = user;
 
+    if (user.isBlocked){
+      return res.status(403).json({
+        success: false,
+        error: 'User account is blocked by admin.',
+        blockedAt: user.blockedAt,
+        blockedReason: user.blockedReason
+      })
+    }
+
     // If user's role is volunteer_pending and they are trying to access an endpoint 
     // other than allowed ones, then deny access.
     const allowedForPendingVolunteer = ['/api/me', '/api/logout'];
