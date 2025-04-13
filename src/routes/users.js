@@ -46,12 +46,20 @@ router.get('/me', authenticate, async (req, res) => {
 // Update user profile
 router.put('/me', authenticate, async (req, res) => {
   try {
-    const { userName, phone, address } = req.body;
+    const { userName, phone, address, profilePicture } = req.body;
     const updateData = {};
 
     if (userName) updateData.userName = userName;
     if (phone) updateData.phone = phone;
-    if (address) updateData.address = JSON.parse(address);
+    if (address) updateData.address = address; // Remove JSON.parse since it's already an object
+
+    // Handle profile picture if provided
+    if (profilePicture) {
+      updateData.profilePicture = {
+        data: Buffer.from(profilePicture, 'base64'),
+        contentType: 'image/jpeg'
+      };
+    }
 
     const user = await User.findByIdAndUpdate(
       req.user._id,
@@ -73,7 +81,7 @@ router.put('/me', authenticate, async (req, res) => {
         error: `${field} already exists` 
       });
     }
-    res.status(500).json({ success: false, error: 'Server error' });
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
