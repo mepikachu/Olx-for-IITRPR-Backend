@@ -10,13 +10,15 @@ router.get('/', authenticate, async (req, res) => {
     })
     .sort({ createdAt: -1 })
     .populate('productId')  // Fully populate the product details
+    .populate('offerId')  // Add this line to populate offer details
     .exec();
 
     res.json({ 
       success: true, 
       notifications: notifications.map(notification => ({
         ...notification.toObject(),
-        productId: notification.productId?._id  // Only send the product ID
+        productId: notification.productId?._id,  // Only send the product ID
+        offerId: notification.offerId?._id  // Include offer ID in response
       }))
     });
   } catch (err) {
