@@ -5,18 +5,19 @@ const authenticate = require('../middleware/auth');
 
 router.get('/', authenticate, async (req, res) => {
   try {
-    console.log('User ID:', req.user._id); // Debug log
     const notifications = await Notification.find({ 
       userId: req.user._id 
     })
     .sort({ createdAt: -1 })
-    .populate('productId', 'name');
-
-    console.log('Found notifications:', notifications); // Debug log
+    .populate('productId')  // Fully populate the product details
+    .exec();
 
     res.json({ 
       success: true, 
-      notifications 
+      notifications: notifications.map(notification => ({
+        ...notification.toObject(),
+        productId: notification.productId?._id  // Only send the product ID
+      }))
     });
   } catch (err) {
     console.error('Error fetching notifications:', err);
