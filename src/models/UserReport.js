@@ -47,4 +47,4 @@ const UserReportSchema = new mongoose.Schema({
   }
 });
 
-module.exports = mongoose.model('Report', reportSchema);
+module.exports = mongoose.model('Report', UserReportSchema);
