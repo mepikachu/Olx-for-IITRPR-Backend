@@ -8,7 +8,16 @@ const notificationSchema = new mongoose.Schema({
   },
   type: {
     type: String,
-    enum: ['offer_accepted', 'offer_rejected', 'product_updated', 'offer_received'],
+    enum: [
+      'offer_accepted', 
+      'offer_rejected', 
+      'product_updated', 
+      'offer_received',
+      'report_reviewed',
+      'user_blocked',
+      'product_deleted', 
+      'warnings_received'
+    ],
     required: true
   },
   message: {
@@ -18,6 +27,10 @@ const notificationSchema = new mongoose.Schema({
   productId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Product'
+  },
+  reportId: { 
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'Report'
   },
   read: {
     type: Boolean,

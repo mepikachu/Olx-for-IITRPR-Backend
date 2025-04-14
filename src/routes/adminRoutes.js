@@ -1439,107 +1439,46 @@ router.get('/donations/:id', async (req, res) => {
   }
 });
 
-// Get all reports with filtering (enhanced version)
+// Get all reports (simplified version without filtering)
 router.get('/reports', async (req, res) => {
   try {
-    const { 
-      type = 'all', 
-      status, 
-      startDate, 
-      endDate, 
-      page = 1, 
-      limit = 10 
-    } = req.query;
+    const { page = 1, limit = 10 } = req.query;
     
     const pageNum = parseInt(page);
     const limitNum = parseInt(limit);
     const skip = (pageNum - 1) * limitNum;
     
-    let query = {};
-    
-    // Filter by status if provided
-    if (status && status !== 'all') {
-      query.status = status;
-    }
-    
-    // Filter by date range if provided
-    if (startDate || endDate) {
-      query.createdAt = {};
-      if (startDate) {
-        query.createdAt.$gte = new Date(startDate);
-      }
-      if (endDate) {
-        query.createdAt.$lte = new Date(endDate);
-      }
-    }
-    
-    let reports = [];
-    let totalCount = 0;
-    
-    // Get reports based on type
-    if (type === 'all' || type === 'both') {
-      // Get both user reports and product reports
-      const userReportsPromise = UserReport.find(query)
-        .populate('reporter', 'userName email')
-        .populate('reportedUser', 'userName email')
-        .sort({ createdAt: -1 });
-        
-      const productReportsPromise = ProductReport.find(query)
-        .populate('reporter', 'userName email')
-        .populate('product')
-        .sort({ createdAt: -1 });
-        
-      const userReportsCountPromise = UserReport.countDocuments(query);
-      const productReportsCountPromise = ProductReport.countDocuments(query);
+    // Get both user reports and product reports
+    const userReportsPromise = UserReport.find()
+      .populate('reporter', 'userName email')
+      .populate('reportedUser', 'userName email')
+      .sort({ createdAt: -1 });
       
-      const [userReports, productReports, userReportsCount, productReportsCount] = 
-        await Promise.all([userReportsPromise, productReportsPromise, userReportsCountPromise, productReportsCountPromise]);
+    const productReportsPromise = ProductReport.find()
+      .populate('reporter', 'userName email')
+      .populate('product')
+      .sort({ createdAt: -1 });
       
-      // Combine and format reports
-      const combinedReports = [
-        ...userReports.map(report => ({
-          ...report.toObject(),
-          reportType: 'user'
-        })),
-        ...productReports.map(report => ({
-          ...report.toObject(),
-          reportType: 'product'
-        }))
-      ].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-      
-      reports = combinedReports.slice(skip, skip + limitNum);
-      totalCount = userReportsCount + productReportsCount;
-    } else if (type === 'user') {
-      // Get only user reports
-      reports = await UserReport.find(query)
-        .populate('reporter', 'userName email')
-        .populate('reportedUser', 'userName email')
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limitNum);
-        
-      reports = reports.map(report => ({
+    const userReportsCountPromise = UserReport.countDocuments();
+    const productReportsCountPromise = ProductReport.countDocuments();
+    
+    const [userReports, productReports, userReportsCount, productReportsCount] = 
+      await Promise.all([userReportsPromise, productReportsPromise, userReportsCountPromise, productReportsCountPromise]);
+    
+    // Combine and format reports
+    const combinedReports = [
+      ...userReports.map(report => ({
         ...report.toObject(),
         reportType: 'user'
-      }));
-      
-      totalCount = await UserReport.countDocuments(query);
-    } else if (type === 'product') {
-      // Get only product reports
-      reports = await ProductReport.find(query)
-        .populate('reporter', 'userName email')
-        .populate('product')
-        .sort({ createdAt: -1 })
-        .skip(skip)
-        .limit(limitNum);
-        
-      reports = reports.map(report => ({
+      })),
+      ...productReports.map(report => ({
         ...report.toObject(),
         reportType: 'product'
-      }));
-      
-      totalCount = await ProductReport.countDocuments(query);
-    }
+      }))
+    ].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+    
+    const reports = combinedReports.slice(skip, skip + limitNum);
+    const totalCount = userReportsCount + productReportsCount;
     
     return res.status(200).json({
       success: true,
@@ -1627,10 +1566,17 @@ router.get('/reports/:reportId', async (req, res) => {
 });
 
 // Block user based on report
-router.post('/reports/:reportId/block-user', async (req, res) => {
+router.post('/reports/:reportId/resolve/block-user', async (req, res) => {
   try {
     const { reportId } = req.params;
-    const { type } = req.body;
+    const { adminNotes, blockReason } = req.body;
+    
+    if (!adminNotes || !blockReason) {
+      return res.status(400).json({
+        success: false,
+        message: 'Admin notes and block reason are required'
+      });
+    }
     
     if (!mongoose.Types.ObjectId.isValid(reportId)) {
       return res.status(400).json({
@@ -1639,39 +1585,39 @@ router.post('/reports/:reportId/block-user', async (req, res) => {
       });
     }
     
-    let report;
-    let userToBlock;
+    // Check if it's a user report or product report
+    let report = await UserReport.findById(reportId);
+    let reportType = 'user';
     
-    if (type === 'user') {
-      report = await UserReport.findById(reportId);
+    if (!report) {
+      report = await ProductReport.findById(reportId).populate('product');
+      reportType = 'product';
       
       if (!report) {
         return res.status(404).json({
           success: false,
-          message: 'User report not found'
+          message: 'Report not found'
         });
       }
-      
+    }
+    
+    let userToBlock;
+    let reporterUser;
+    
+    if (reportType === 'user') {
       userToBlock = await User.findById(report.reportedUser);
-    } else if (type === 'product') {
-      report = await ProductReport.findById(reportId)
-        .populate('product');
-      
-      if (!report || !report.product) {
+      reporterUser = await User.findById(report.reporter);
+    } else {
+      // For product report, block the seller
+      if (!report.product || !report.product.seller) {
         return res.status(404).json({
           success: false,
-          message: 'Product report or associated product not found'
+          message: 'Product or seller not found'
         });
       }
       
-      // Get the product's seller
-      const product = await Product.findById(report.product);
-      userToBlock = await User.findById(product.seller);
-    } else {
-      return res.status(400).json({
-        success: false,
-        message: 'Report type must be specified'
-      });
+      userToBlock = await User.findById(report.product.seller);
+      reporterUser = await User.findById(report.reporter);
     }
     
     if (!userToBlock) {
@@ -1681,24 +1627,39 @@ router.post('/reports/:reportId/block-user', async (req, res) => {
       });
     }
     
-    // Set user as blocked
+    // Block user
     userToBlock.isBlocked = true;
     userToBlock.blockedAt = new Date();
-    userToBlock.blockedReason = `Blocked based on ${type} report (#${reportId})`;
+    userToBlock.blockedReason = blockReason;
     await userToBlock.save();
     
     // Update report status
-    if (type === 'user') {
-      report.status = 'resolved';
-      report.adminNotes = report.adminNotes ? 
-        `${report.adminNotes}\nUser blocked on ${new Date().toISOString()}` : 
-        `User blocked on ${new Date().toISOString()}`;
-      report.reviewedAt = new Date();
-    } else if (type === 'product') {
-      report.status = 'resolved';
-    }
-    
+    report.status = 'resolved';
+    report.adminNotes = adminNotes;
+    report.reviewedAt = new Date();
     await report.save();
+    
+    // Create notification for the blocked user
+    const blockedNotification = new Notification({
+      userId: userToBlock._id,
+      type: 'user_blocked',
+      message: `Your account has been blocked. Reason: ${blockReason}`,
+      reportId: reportId,
+      read: false
+    });
+    await blockedNotification.save();
+    
+    // Create notification for the reporter
+    if (reporterUser) {
+      const reporterNotification = new Notification({
+        userId: reporterUser._id,
+        type: 'report_reviewed',
+        message: `Your report has been resolved. The reported user has been blocked.`,
+        reportId: reportId,
+        read: false
+      });
+      await reporterNotification.save();
+    }
     
     return res.status(200).json({
       success: true,
@@ -1715,9 +1676,17 @@ router.post('/reports/:reportId/block-user', async (req, res) => {
 });
 
 // Delete product based on report
-router.delete('/reports/:reportId/delete-product', async (req, res) => {
+router.post('/reports/:reportId/resolve/delete-product', async (req, res) => {
   try {
     const { reportId } = req.params;
+    const { adminNotes, deleteReason } = req.body;
+    
+    if (!adminNotes || !deleteReason) {
+      return res.status(400).json({
+        success: false,
+        message: 'Admin notes and delete reason are required'
+      });
+    }
     
     if (!mongoose.Types.ObjectId.isValid(reportId)) {
       return res.status(400).json({
@@ -1726,7 +1695,7 @@ router.delete('/reports/:reportId/delete-product', async (req, res) => {
       });
     }
     
-    const report = await ProductReport.findById(reportId);
+    const report = await ProductReport.findById(reportId).populate('product').populate('reporter');
     
     if (!report) {
       return res.status(404).json({
@@ -1735,12 +1704,51 @@ router.delete('/reports/:reportId/delete-product', async (req, res) => {
       });
     }
     
+    if (!report.product) {
+      return res.status(404).json({
+        success: false,
+        message: 'Product not found'
+      });
+    }
+    
+    // Get product seller
+    const productSeller = await User.findById(report.product.seller);
+    const reporterUser = report.reporter;
+    
     // Delete the product
-    await Product.findByIdAndDelete(report.product);
+    await Product.findByIdAndDelete(report.product._id);
     
     // Update report status
     report.status = 'resolved';
+    report.adminNotes = adminNotes;
+    report.reviewedAt = new Date();
     await report.save();
+    
+    // Create notification for the product seller
+    if (productSeller) {
+      const sellerNotification = new Notification({
+        userId: productSeller._id,
+        type: 'product_deleted',
+        message: `Your product "${report.product.name}" has been deleted. Reason: ${deleteReason}`,
+        read: false,
+        productId: report.product._id,
+        reportId: reportId
+      });
+      await sellerNotification.save();
+    }
+    
+    // Create notification for the reporter
+    if (reporterUser) {
+      const reporterNotification = new Notification({
+        userId: reporterUser._id,
+        type: 'report_reviewed',
+        message: `Your report has been resolved. The reported product has been deleted.`,
+        read: false,
+        productId: report.product._id,
+        reportId: reportId
+      });
+      await reporterNotification.save();
+    }
     
     return res.status(200).json({
       success: true,
@@ -1749,6 +1757,174 @@ router.delete('/reports/:reportId/delete-product', async (req, res) => {
     });
   } catch (error) {
     console.error('Delete product error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Server error: ' + error.message
+    });
+  }
+});
+
+// Issue warning based on report
+router.post('/reports/:reportId/resolve/issue-warning', async (req, res) => {
+  try {
+    const { reportId } = req.params;
+    const { adminNotes, warningMessage } = req.body;
+    
+    if (!adminNotes || !warningMessage) {
+      return res.status(400).json({
+        success: false,
+        message: 'Admin notes and warning message are required'
+      });
+    }
+    
+    if (!mongoose.Types.ObjectId.isValid(reportId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid report ID format'
+      });
+    }
+    
+    // Check if it's a user report or product report
+    let report = await UserReport.findById(reportId).populate('reporter');
+    let reportType = 'user';
+    let userToWarn;
+    
+    if (!report) {
+      report = await ProductReport.findById(reportId).populate('product').populate('reporter');
+      reportType = 'product';
+      
+      if (!report) {
+        return res.status(404).json({
+          success: false,
+          message: 'Report not found'
+        });
+      }
+    }
+    
+    if (reportType === 'user') {
+      userToWarn = await User.findById(report.reportedUser);
+    } else {
+      // For product report, warn the seller
+      if (!report.product || !report.product.seller) {
+        return res.status(404).json({
+          success: false,
+          message: 'Product or seller not found'
+        });
+      }
+      
+      userToWarn = await User.findById(report.product.seller);
+    }
+    
+    if (!userToWarn) {
+      return res.status(404).json({
+        success: false,
+        message: 'User to warn not found'
+      });
+    }
+    
+    // Update report status
+    report.status = 'resolved';
+    report.adminNotes = adminNotes;
+    report.reviewedAt = new Date();
+    await report.save();
+    
+    // Create notification for the warned user
+    const warnedNotification = new Notification({
+      userId: userToWarn._id,
+      type: 'warning_received',
+      message: warningMessage,
+      reportId: reportId,
+      read: false
+    });
+    await warnedNotification.save();
+    
+    // Create notification for the reporter
+    if (report.reporter) {
+      const reporterNotification = new Notification({
+        userId: report.reporter._id,
+        type: 'report_reviewed',
+        message: `Your report has been resolved. A warning has been issued to the ${reportType === 'user' ? 'user' : 'product seller'}.`,
+        reportId: reportId,
+        read: false
+      });
+      await reporterNotification.save();
+    }
+    
+    return res.status(200).json({
+      success: true,
+      message: 'Warning issued successfully',
+      report
+    });
+  } catch (error) {
+    console.error('Issue warning error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Server error: ' + error.message
+    });
+  }
+});
+
+// Dismiss report without action
+router.post('/reports/:reportId/resolve/dismiss', async (req, res) => {
+  try {
+    const { reportId } = req.params;
+    const { adminNotes } = req.body;
+    
+    if (!adminNotes) {
+      return res.status(400).json({
+        success: false,
+        message: 'Admin notes are required'
+      });
+    }
+    
+    if (!mongoose.Types.ObjectId.isValid(reportId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid report ID format'
+      });
+    }
+    
+    // Check if it's a user report or product report
+    let report = await UserReport.findById(reportId).populate('reporter');
+    let reportType = 'user';
+    
+    if (!report) {
+      report = await ProductReport.findById(reportId).populate('reporter');
+      reportType = 'product';
+      
+      if (!report) {
+        return res.status(404).json({
+          success: false,
+          message: 'Report not found'
+        });
+      }
+    }
+    
+    // Update report status
+    report.status = 'dismissed';
+    report.adminNotes = adminNotes;
+    report.reviewedAt = new Date();
+    await report.save();
+    
+    // Create notification for the reporter
+    if (report.reporter) {
+      const reporterNotification = new Notification({
+        userId: report.reporter._id,
+        type: 'report_reviewed',
+        message: `Your report has been reviewed but was dismissed. No action has been taken.`,
+        reportId: reportId,
+        read: false
+      });
+      await reporterNotification.save();
+    }
+    
+    return res.status(200).json({
+      success: true,
+      message: 'Report dismissed successfully',
+      report
+    });
+  } catch (error) {
+    console.error('Dismiss report error:', error);
     return res.status(500).json({
       success: false,
       message: 'Server error: ' + error.message

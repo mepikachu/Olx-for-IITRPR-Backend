@@ -1,7 +1,7 @@
 // models/Report.js
 const mongoose = require('mongoose');
 
-const reportSchema = new mongoose.Schema({
+const UserReportSchema = new mongoose.Schema({
   reporter: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
@@ -31,7 +31,7 @@ const reportSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['pending', 'reviewed', 'resolved', 'dismissed'],
+    enum: ['pending', 'resolved', 'dismissed'],
     default: 'pending'
   },
   adminNotes: {
