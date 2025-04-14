@@ -3,26 +3,6 @@ const router = express.Router();
 const User = require('../models/user');
 const authenticate = require('../middleware/auth');
 
-// Get all users (admin only)
-router.get('/', authenticate, async (req, res) => {
-  if (req.user.role !== 'admin') {
-    return res.status(405).json({ 
-      success: false, 
-      error: 'Unauthorized: Admin access required' 
-    });
-  }
-
-  try {
-    const users = await User.find()
-      .select('-password')
-      .populate('soldProducts purchasedProducts');
-    res.json({ success: true, users });
-  } catch (err) {
-    console.error('Error fetching users:', err);
-    res.status(500).json({ success: false, error: 'Server error' });
-  }
-});
-
 // Get user profile
 router.get('/me', authenticate, async (req, res) => {
   try {

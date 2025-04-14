@@ -1090,6 +1090,18 @@ router.get('/users', async (req, res) => {
   }
 });
 
+// Get all users (admin only) no filter
+router.get('/users/all', async (req, res) => {
+  try {
+    const users = await User.find()
+      .select('-password -authCookie -authCookieCreated -authCookieExpires')
+    res.json({ success: true, users });
+  } catch (error) {
+    console.error('Error fetching users: ', error);
+    res.status(500).json({ success: false, message: 'Server error fetching users' });
+  }
+});
+
 // Get single user details
 router.get('/users/:id', async (req, res) => {
   try {
