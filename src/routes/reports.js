@@ -10,12 +10,10 @@ const mongoose = require('mongoose');
 // Submit a user report
 router.post('/user', auth, async (req, res) => {
   try {
-    console.log('Report submission received:', req.body);
     const { reportedUserId, reason, details, includeChat, conversationId } = req.body;
 
     // Basic validation
     if (!reportedUserId || !reason) {
-      console.log('Missing required fields');
       return res.status(400).json({
         success: false,
         message: 'Missing required fields'
@@ -33,9 +31,7 @@ router.post('/user', auth, async (req, res) => {
       status: 'pending'
     });
 
-    console.log('Saving report:', report);
     await report.save();
-    console.log('Report saved successfully');
     
     return res.status(201).json({
       success: true,
@@ -54,16 +50,35 @@ router.post('/user', auth, async (req, res) => {
 router.post('/product', auth, async (req, res) => {
   try {
     const { productId, reason, description } = req.body;
+
+    // Basic validation
+    if (!productId || !reason) {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing required fields'
+      });
+    }
+
     const report = new ProductReport({
       product: productId,
       reporter: req.user._id,
       reason,
-      description
+      description: description || '',
+      status: 'pending'
     });
+
     await report.save();
-    res.status(201).json({ success: true, report });
+    
+    return res.status(201).json({
+      success: true,
+      message: 'Report submitted successfully'
+    });
   } catch (error) {
-    res.status(500).json({ success: false, error: error.message });
+    console.error('Create report error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Server error: ' + error.message
+    });
   }
 });
 
