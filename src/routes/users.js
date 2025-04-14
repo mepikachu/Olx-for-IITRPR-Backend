@@ -89,11 +89,10 @@ router.get('/profile-picture/:userId', async (req, res) => {
 router.get('/profile/:userId', authenticate, async (req, res) => {
   try {
     const requestedUserId = req.params.userId;
-    const isAdmin = req.user.role === 'admin';
-    
+
     // Find the user
     const user = await User.findById(requestedUserId)
-      .select('-password -authCookie -authCookieCreated -authCookieExpires');
+      .select('-email -password -phone -soldProducts -warningIssued -isBlocked -blockedAt -blockedReason -authCookie -authCookieCreated -authCookieExpires');
     
     if (!user) {
       return res.status(404).json({ 
@@ -107,30 +106,6 @@ router.get('/profile/:userId', authenticate, async (req, res) => {
       donatedBy: requestedUserId 
     });
     
-    // If not admin, filter what data to show
-    if (!isAdmin && req.user._id.toString() !== requestedUserId) {
-      // For non-admins viewing other profiles, only return limited info
-      return res.json({
-        success: true,
-        user: {
-          _id: user._id,
-          userName: user.userName,
-          role: user.role,
-          address: user.address,
-          profilePicture: user.profilePicture ? true : false,
-          registrationDate: user.registrationDate
-        },
-        donations: donations.map(d => ({
-          _id: d._id,
-          name: d.name,
-          description: d.description,
-          status: d.status,
-          donationDate: d.donationDate
-        }))
-      });
-    }
-    
-    // Admin view or user viewing their own profile
     return res.json({
       success: true,
       user: user,

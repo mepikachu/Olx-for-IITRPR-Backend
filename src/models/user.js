@@ -60,6 +60,10 @@ const UserSchema = new mongoose.Schema({
     enum: ['admin', 'volunteer', 'volunteer_pending', 'user'],
     default: 'user'
   },
+  warningIssued: {
+    type: Number,
+    default: 0
+  },
   isBlocked: {
     type: Boolean,
     default: false

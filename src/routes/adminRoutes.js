@@ -1039,62 +1039,12 @@ router.get('/reports/stats', async (req, res) => {
 
 /*** USER MANAGEMENT ROUTES ***/
 
-// Get all users with filtering and pagination
-router.get('/users', async (req, res) => {
-  try {
-    const { page = 1, limit = 20, search, role, sortBy, order = 'desc' } = req.query;
-    
-    // Build query
-    const query = {};
-    
-    if (search) {
-      query.$or = [
-        { userName: { $regex: search, $options: 'i' } },
-        { email: { $regex: search, $options: 'i' } },
-        { phone: { $regex: search, $options: 'i' } }
-      ];
-    }
-    
-    if (role) {
-      query.role = role;
-    }
-    
-    // Build sort object
-    let sort = {};
-    if (sortBy) {
-      sort[sortBy] = order === 'asc' ? 1 : -1;
-    } else {
-      sort = { registrationDate: -1 }; // Default sort by registration date
-    }
-    
-    // Execute query with pagination
-    const users = await User.find(query)
-      .select('-password -authCookie -authCookieCreated -authCookieExpires')
-      .sort(sort)
-      .skip((page - 1) * limit)
-      .limit(parseInt(limit));
-    
-    // Get total count for pagination
-    const totalUsers = await User.countDocuments(query);
-    
-    res.status(200).json({
-      success: true,
-      users,
-      totalPages: Math.ceil(totalUsers / parseInt(limit)),
-      currentPage: parseInt(page),
-      totalUsers
-    });
-  } catch (error) {
-    console.error('Error fetching users:', error);
-    res.status(500).json({ success: false, message: 'Server error fetching users' });
-  }
-});
-
 // Get all users (admin only) no filter
-router.get('/users/all', async (req, res) => {
+router.get('/users/', async (req, res) => {
   try {
     const users = await User.find()
-      .select('-password -authCookie -authCookieCreated -authCookieExpires')
+      .select('+profilePicture +userName +email +role +isBlocked');
+
     res.json({ success: true, users });
   } catch (error) {
     console.error('Error fetching users: ', error);
@@ -1839,6 +1789,9 @@ router.post('/reports/:reportId/resolve/issue-warning', async (req, res) => {
     report.adminNotes = adminNotes;
     report.reviewedAt = new Date();
     await report.save();
+
+    userToWarn.warningIssued += 1;
+    await userToWarn.save();
     
     // Create notification for the warned user
     const warnedNotification = new Notification({

@@ -89,6 +89,32 @@ router.get('/:productId', authenticate, async (req, res) => {
   }
 });
 
+router.get('/:productId/image', authenticate, async (req, res) => {
+  try {
+    const { productId } = req.params;
+    
+    let product = await Product.findById(productId)
+      .select('+images');
+    
+    if (!product) {
+      return res.status(404).json({ success: false, error: 'Product not found' });
+    }
+    
+    // Convert only the first image buffer to base64
+    product.images = product.images?.length
+      ? [{
+          data: product.images[0].data?.toString('base64'),
+          contentType: product.images[0].contentType
+        }]
+      : [];
+    
+    res.json({ success: true, product });
+  } catch (err) {
+    console.error('Error fetching product:', err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+});
+
 // Create a new product
 router.post('/', authenticate, upload.array('images', 5), async (req, res) => {
   try {
