@@ -35,12 +35,35 @@ router.get('/', authenticate, async (req, res) => {
   }
 });
 
+// Get donation by ID
+router.get('/:donationId', authenticate, async (req, res) => {
+  try {
+    const { donationId } = req.params;
+    
+    let donation = await Donations.findById(donationId)
+      .populate('donatedBy', 'userName')
+      .lean();
+    
+    if (!product) {
+      return res.status(404).json({ success: false, error: 'Donation not found' });
+    }
+    
+    // Convert image buffers to base64
+    donation.images = donation.images?.map(img => ({
+      data: img.data?.toString('base64'),
+      contentType: img.contentType
+    })) || [];
+    
+    res.json({ success: true, donation });
+  } catch (err) {
+    console.error('Error fetching donation: ', err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+});
+
 // Add a donation (by normal user)
 router.post('/', authenticate, upload.array('images', 5), async (req, res) => {
   try {
-    console.log("Received donation submission:", req.body);
-    console.log("Files received:", req.files.length);
-
     const images = req.files.map(file => ({
       data: file.buffer,
       contentType: file.mimetype
