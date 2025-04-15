@@ -130,7 +130,8 @@ router.get('/:productId/images', authenticate, async (req, res) => {
     const { productId } = req.params;
     
     let product = await Product.findById(productId)
-      .select('+images');
+      .select('+images')
+      .lean();
 
     const user = await User.findById(req.user._id);
 
