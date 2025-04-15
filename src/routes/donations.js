@@ -6,6 +6,77 @@ const multer = require('multer');
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
+// Get donation leaderboard
+router.get('/leaderboard', authenticate, async (req, res) => {
+  try {
+    const donorsLeaderboard = await Donations.aggregate([
+      {
+        $group: {
+          _id: '$donatedBy',
+          totalDonations: { $count: {} }
+        }
+      },
+      { $sort: { totalDonations: -1 } },
+      { $limit: 10 },
+      {
+        $lookup: {
+          from: 'users',
+          localField: '_id',
+          foreignField: '_id',
+          as: 'userDetails'
+        }
+      },
+      {
+        $project: {
+          _id: 1,
+          totalDonations: 1,
+          userName: { $arrayElemAt: ['$userDetails.userName', 0] },
+          role: 'donor'
+        }
+      }
+    ]);
+
+    const volunteersLeaderboard = await Donations.aggregate([
+      {
+        $match: { status: 'collected' }
+      },
+      {
+        $group: {
+          _id: '$collectedBy',
+          totalCollections: { $count: {} }
+        }
+      },
+      { $sort: { totalCollections: -1 } },
+      { $limit: 10 },
+      {
+        $lookup: {
+          from: 'users',
+          localField: '_id',
+          foreignField: '_id',
+          as: 'userDetails'
+        }
+      },
+      {
+        $project: {
+          _id: 1,
+          totalDonations: '$totalCollections',
+          userName: { $arrayElemAt: ['$userDetails.userName', 0] },
+          role: 'volunteer'
+        }
+      }
+    ]);
+
+    res.json({ 
+      success: true, 
+      donors: donorsLeaderboard,
+      volunteers: volunteersLeaderboard
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+});
+
 // Get all donations
 router.get('/', authenticate, async (req, res) => {
   try {
@@ -172,77 +243,6 @@ router.post('/:donationId/collect', authenticate, async (req, res) => {
     res.json({ success: true, donation });
   } catch (err) {
     console.error('Collection error:', err);
-    res.status(500).json({ success: false, error: 'Server error' });
-  }
-});
-
-// Get donation leaderboard
-router.get('/leaderboard', authenticate, async (req, res) => {
-  try {
-    const donorsLeaderboard = await Donations.aggregate([
-      {
-        $group: {
-          _id: '$donatedBy',
-          totalDonations: { $count: {} }
-        }
-      },
-      { $sort: { totalDonations: -1 } },
-      { $limit: 10 },
-      {
-        $lookup: {
-          from: 'users',
-          localField: '_id',
-          foreignField: '_id',
-          as: 'userDetails'
-        }
-      },
-      {
-        $project: {
-          _id: 1,
-          totalDonations: 1,
-          userName: { $arrayElemAt: ['$userDetails.userName', 0] },
-          role: 'donor'
-        }
-      }
-    ]);
-
-    const volunteersLeaderboard = await Donations.aggregate([
-      {
-        $match: { status: 'collected' }
-      },
-      {
-        $group: {
-          _id: '$collectedBy',
-          totalCollections: { $count: {} }
-        }
-      },
-      { $sort: { totalCollections: -1 } },
-      { $limit: 10 },
-      {
-        $lookup: {
-          from: 'users',
-          localField: '_id',
-          foreignField: '_id',
-          as: 'userDetails'
-        }
-      },
-      {
-        $project: {
-          _id: 1,
-          totalDonations: '$totalCollections',
-          userName: { $arrayElemAt: ['$userDetails.userName', 0] },
-          role: 'volunteer'
-        }
-      }
-    ]);
-
-    res.json({ 
-      success: true, 
-      donors: donorsLeaderboard,
-      volunteers: volunteersLeaderboard
-    });
-  } catch (err) {
-    console.error(err);
     res.status(500).json({ success: false, error: 'Server error' });
   }
 });
