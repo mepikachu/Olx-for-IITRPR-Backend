@@ -97,33 +97,30 @@ router.get('/:productId', authenticate, async (req, res) => {
 router.get('/:productId/main_image', authenticate, async (req, res) => {
   try {
     const { productId } = req.params;
-    
-    let product = await Product.findById(productId)
+    const product = await Product.findById(productId)
       .select('+images')
       .lean();
 
     const user = await User.findById(req.user._id);
-
-    if (!product || ((!user || user.role !== 'admin') && product.status == 'deleted')) {
+    if (!product || ((!user || user.role !== 'admin') && product.status === 'deleted')) {
       return res.status(404).json({ success: false, error: 'Product not found' });
     }
 
-    const numImages = product.images?.length || 0;
-    
-    // Convert only the first image buffer to base64
-    product.images = product.images?.length
-      ? [{
-          data: product.images[0].data?.toString('base64'),
+    const numImages = (product.images || []).length;
+    const mainImage = numImages > 0
+      ? {
+          data: product.images[0].data.toString('base64'),
           contentType: product.images[0].contentType
-        }]
-      : [];
-    
-    res.json({ success: true, image: product.images, numImages });
+        }
+      : null;
+
+    res.json({ success: true, image: mainImage, numImages });
   } catch (err) {
-    console.error('Error fetching product:', err);
+    console.error('Error fetching main image:', err);
     res.status(500).json({ success: false, error: 'Server error' });
   }
 });
+
 
 // Get all the images
 router.get('/:productId/images', authenticate, async (req, res) => {
