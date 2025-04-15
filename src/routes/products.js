@@ -139,9 +139,9 @@ router.get('/:productId/images', authenticate, async (req, res) => {
     }
 
     product.images = product.images?.map(img => ({
-      data: img.data?.toString('base64'),
+      data: img.data.toString('base64'),
       contentType: img.contentType
-    })) || [];
+    }));
     
     res.json({ success: true, images: product.images });
   } catch (err) {

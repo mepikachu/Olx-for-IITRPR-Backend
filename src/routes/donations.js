@@ -16,19 +16,21 @@ router.get('/', authenticate, async (req, res) => {
       query.donatedBy = req.user._id;
     }
     const donations = await Donations.find(query)
+      .select('-images')
       .populate('donatedBy', 'userName')
       .populate('collectedBy', 'userName');
 
-    const donationsData = donations.map(donation => {
-      const donationObj = donation.toObject();
-      donationObj.images = (donationObj.images || []).map(img => ({
-        data: img.data ? img.data.toString('base64') : null,
-        contentType: img.contentType
-      }));
-      return donationObj;
-    });
+    // Don't return donation images here
+    // const donationsData = donations.map(donation => {
+    //   const donationObj = donation.toObject();
+    //   donationObj.images = (donationObj.images || []).map(img => ({
+    //     data: img.data ? img.data.toString('base64') : null,
+    //     contentType: img.contentType
+    //   }));
+    //   return donationObj;
+    // });
 
-    res.json({ success: true, donations: donationsData });
+    res.json({ success: true, donations: donations });
   } catch (err) {
     console.error(err);
     res.status(500).json({ success: false, error: 'Server error' });
@@ -41,6 +43,7 @@ router.get('/:donationId', authenticate, async (req, res) => {
     const { donationId } = req.params;
     
     let donation = await Donations.findById(donationId)
+      .select('-images')
       .populate('donatedBy', 'userName')
       .lean();
     
@@ -48,11 +51,12 @@ router.get('/:donationId', authenticate, async (req, res) => {
       return res.status(404).json({ success: false, error: 'Donation not found' });
     }
     
+    // Don't return donation images here
     // Convert image buffers to base64
-    donation.images = donation.images?.map(img => ({
-      data: img.data?.toString('base64'),
-      contentType: img.contentType
-    })) || [];
+    // donation.images = donation.images?.map(img => ({
+    //   data: img.data?.toString('base64'),
+    //   contentType: img.contentType
+    // })) || [];
     
     res.json({ success: true, donation });
   } catch (err) {
