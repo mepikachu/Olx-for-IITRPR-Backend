@@ -30,7 +30,7 @@ router.get('/', authenticate, async (req, res) => {
 });
 
 // Get notifications after a specific notificationId
-router.get('/after/:notificationId', auth, async (req, res) => {
+router.get('/after/:notificationId', authenticate, async (req, res) => {
   try {
     const notifications = await Notification.find({
       userId: req.user._id,
@@ -48,7 +48,7 @@ router.get('/after/:notificationId', auth, async (req, res) => {
 });
 
 // Mark a notification as read
-router.patch('/:id/read', auth, async (req, res) => {
+router.patch('/:id/read', authenticate, async (req, res) => {
   try {
     const notification = await Notification.findOneAndUpdate(
       { _id: req.params.id, userId: req.user._id },
