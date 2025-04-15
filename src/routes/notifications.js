@@ -41,7 +41,10 @@ router.get('/after/:notificationId', authenticate, async (req, res) => {
     .populate('offerId')
     .populate('reportId');
 
-    res.json(notifications);
+    res.json({
+      success: true,
+      notifications: notifications
+    });
   } catch (error) {
     res.status(500).send({ message: 'Server error', error: error.message });
   }
@@ -60,7 +63,9 @@ router.patch('/:id/read', authenticate, async (req, res) => {
       return res.status(404).send({ message: 'Notification not found' });
     }
 
-    res.json(notification);
+    res.json({
+      success: true,
+    });
   } catch (error) {
     res.status(500).send({ message: 'Server error', error: error.message });
   }
