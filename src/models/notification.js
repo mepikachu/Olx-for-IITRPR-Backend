@@ -1,6 +1,10 @@
 const mongoose = require('mongoose');
 
 const notificationSchema = new mongoose.Schema({
+  notificationId: {
+    type: Number,
+    default: 1
+  },
   userId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',
@@ -44,6 +48,20 @@ const notificationSchema = new mongoose.Schema({
     type: Date,
     default: Date.now
   }
+});
+
+notificationSchema.pre('save', async function(next) {
+  if (this.isNew) {
+    const lastNotification = await this.constructor.findOne(
+      { userId: this.userId },
+      { notificationId: 1 }
+    ).sort({ notificationId: -1 });
+
+    if (lastNotification) {
+      this.notificationId = lastNotification.notificationId + 1;
+    }
+  }
+  next();
 });
 
 module.exports = mongoose.model('Notification', notificationSchema);
