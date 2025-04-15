@@ -107,7 +107,7 @@ router.get('/:productId/main_image', authenticate, async (req, res) => {
       return res.status(404).json({ success: false, error: 'Product not found' });
     }
 
-    const numImages = length(product.images);
+    const numImages = product.images?.length || 0;
     
     // Convert only the first image buffer to base64
     product.images = product.images?.length

@@ -73,7 +73,7 @@ router.get('/:donationId/main_image', authenticate, async (req, res) => {
       return res.status(404).json({ success: false, error: 'Donation not found' });
     }
 
-    const numImages = length(donation.images);
+    const numImages = donation.images?.length || 0;
     
     // Convert only the first image buffer to base64
     donation.images = donation.images?.length
