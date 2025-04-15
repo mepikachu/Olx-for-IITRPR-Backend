@@ -44,17 +44,19 @@ router.get('/', authenticate, async (req, res) => {
     };
 
     let products = await Product.find(filter)
+      .select('-images -offerRequests')
       .populate('seller', 'userName')
       .lean();
 
-    // Convert image buffers to base64
-    products = products.map(product => ({
-      ...product,
-      images: product.images?.map(img => ({
-        data: img.data?.toString('base64'),
-        contentType: img.contentType
-      })) || []
-    }));
+    // No images should be returned so as to save bandwidth
+    // // Convert image buffers to base64
+    // products = products.map(product => ({
+    //   ...product,
+    //   images: product.images?.map(img => ({
+    //     data: img.data?.toString('base64'),
+    //     contentType: img.contentType
+    //   })) || []
+    // }));
 
     res.json({ success: true, products });
   } catch (err) {
@@ -69,18 +71,21 @@ router.get('/:productId', authenticate, async (req, res) => {
     const { productId } = req.params;
     
     let product = await Product.findById(productId)
+      .select('-images -offerRequests')
       .populate('seller', 'userName')
+      .populate('buyer', 'userName')
       .lean();
     
     if (!product || product.status == 'deleted') {
       return res.status(404).json({ success: false, error: 'Product not found' });
     }
     
-    // Convert image buffers to base64
-    product.images = product.images?.map(img => ({
-      data: img.data?.toString('base64'),
-      contentType: img.contentType
-    })) || [];
+    // No images should be returned so as to save bandwidth
+    // // Convert image buffers to base64
+    // product.images = product.images?.map(img => ({
+    //   data: img.data?.toString('base64'),
+    //   contentType: img.contentType
+    // })) || [];
     
     res.json({ success: true, product });
   } catch (err) {
@@ -92,32 +97,28 @@ router.get('/:productId', authenticate, async (req, res) => {
 router.get('/:productId/main_image', authenticate, async (req, res) => {
   try {
     const { productId } = req.params;
-    
-    let product = await Product.findById(productId)
-      .select('+images');
+    const product = await Product.findById(productId)
+      .select('+images')
+      .lean();
 
     const user = await User.findById(req.user._id);
-
-    if (!product || ((!user || user.role !== 'admin') && product.status == 'deleted')) {
+    if (!product || ((!user || user.role !== 'admin') && product.status === 'deleted')) {
       return res.status(404).json({ success: false, error: 'Product not found' });
     }
 
-    const numImages = length(product.images);
-    
-    // Convert only the first image buffer to base64
-    product.images = product.images?.length
-      ? [{
-          data: product.images[0].data?.toString('base64'),
-          contentType: product.images[0].contentType
-        }]
-      : [];
-    
-    res.json({ success: true, image: product.images, numImages });
+    const numImages = (product.images || []).length;
+    product.images = product.images?.map(img => ({
+      data: img.data?.toString('base64'),
+      contentType: img.contentType
+    })) || [];
+
+    res.json({ success: true, image: product.images[0], numImages });
   } catch (err) {
-    console.error('Error fetching product:', err);
+    console.error('Error fetching main image:', err);
     res.status(500).json({ success: false, error: 'Server error' });
   }
 });
+
 
 // Get all the images
 router.get('/:productId/images', authenticate, async (req, res) => {
@@ -125,7 +126,8 @@ router.get('/:productId/images', authenticate, async (req, res) => {
     const { productId } = req.params;
     
     let product = await Product.findById(productId)
-      .select('+images');
+      .select('+images')
+      .lean();
 
     const user = await User.findById(req.user._id);
 
@@ -148,8 +150,6 @@ router.get('/:productId/images', authenticate, async (req, res) => {
 // Create a new product
 router.post('/', authenticate, upload.array('images', 5), async (req, res) => {
   try {
-    console.log("Received product submission:", req.body);
-    console.log("Files received:", req.files.length);
 
     const images = req.files.map(file => ({
       data: file.buffer,
@@ -244,6 +244,7 @@ router.put('/:productId', authenticate, upload.array('images', 5), async (req, r
     product.description = description || product.description;
     product.price = price ? parseFloat(price) : product.price;
     product.images = updatedImages;
+    product.lastUpdatedAt = Date.now;
 
     await product.save();
 

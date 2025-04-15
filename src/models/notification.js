@@ -28,6 +28,10 @@ const notificationSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Product'
   },
+  offerId: {
+   type: mongoose.Schema.Types.ObjectId,
+   ref: 'Offer' 
+  },
   reportId: { 
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Report'

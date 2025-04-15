@@ -9,8 +9,10 @@ router.get('/', authenticate, async (req, res) => {
       userId: req.user._id 
     })
     .sort({ createdAt: -1 })
+    .setOptions({ strictPopulate: false })
     .populate('productId')  // Fully populate the product details
     .populate('offerId')  // Add this line to populate offer details
+    .populate('reportId')
     .exec();
 
     res.json({ 

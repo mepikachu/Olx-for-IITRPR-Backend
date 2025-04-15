@@ -47,40 +47,32 @@ router.post('/', auth, upload.array('images', 5), async (req, res) => {
   }
 });
 
-// Get all lost items
+// GET all lost items (no images)
 router.get('/', auth, async (req, res) => {
   try {
     const items = await LostItem.find()
+      .select('-images')
       .populate('user', 'userName email')
-      .sort('-createdAt');
-
-    res.json({
-      success: true,
-      items
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
+      .sort('-createdAt')
+      .lean();
+    res.json({ success: true, items });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
-// Get user's lost items
+// GET my-items (no images)
 router.get('/my-items', auth, async (req, res) => {
   try {
     const items = await LostItem.find({ user: req.user._id })
-      .sort('-createdAt');
-
-    res.json({
-      success: true,
-      items
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
+      .select('-images')
+      .sort('-createdAt')
+      .lean();
+    res.json({ success: true, items });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
@@ -88,24 +80,58 @@ router.get('/my-items', auth, async (req, res) => {
 router.get('/:id', auth, async (req, res) => {
   try {
     const item = await LostItem.findById(req.params.id)
-      .populate('user', 'userName email');
+      .select('-images')
+      .populate('user', 'userName email')
+      .lean();
 
-    if (!item) {
-      return res.status(404).json({
-        success: false,
-        error: 'Item not found'
-      });
-    }
+    if (!item) return res.status(404).json({ success: false, error: 'Item not found' });
+    
+    res.json({ success: true, item });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 
-    res.json({
-      success: true,
-      item
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
+// GET main image only
+router.get('/:id/main_image', auth, async (req, res) => {
+  try {
+    const item = await LostItem.findById(req.params.id)
+      .select('+images')
+      .lean();
+    if (!item) return res.status(404).json({ success: false, error: 'Item not found' });
+
+    const numImages = (item.images || []).length;
+    item.images = item.images?.map(img => ({
+      data: img.data?.toString('base64'),   
+      contentType: img.contentType
+    })) || [];
+
+    res.json({ success: true, image: item.images[0], numImages });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+});
+
+// GET all images
+router.get('/:id/images', auth, async (req, res) => {
+  try {
+    const item = await LostItem.findById(req.params.id)
+      .select('+images')
+      .lean();
+
+    if (!item) return res.status(404).json({ success: false, error: 'Item not found' });
+
+    item.images = item.images?.map(img => ({
+      data: img.data?.toString('base64'),   
+      contentType: img.contentType
+    })) || [];
+
+    res.json({ success: true, images: item.images });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, error: 'Server error' });
   }
 });
 

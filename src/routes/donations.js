@@ -6,6 +6,77 @@ const multer = require('multer');
 const storage = multer.memoryStorage();
 const upload = multer({ storage: storage });
 
+// Get donation leaderboard
+router.get('/leaderboard', authenticate, async (req, res) => {
+  try {
+    const donorsLeaderboard = await Donations.aggregate([
+      {
+        $group: {
+          _id: '$donatedBy',
+          totalDonations: { $count: {} }
+        }
+      },
+      { $sort: { totalDonations: -1 } },
+      { $limit: 10 },
+      {
+        $lookup: {
+          from: 'users',
+          localField: '_id',
+          foreignField: '_id',
+          as: 'userDetails'
+        }
+      },
+      {
+        $project: {
+          _id: 1,
+          totalDonations: 1,
+          userName: { $arrayElemAt: ['$userDetails.userName', 0] },
+          role: 'donor'
+        }
+      }
+    ]);
+
+    const volunteersLeaderboard = await Donations.aggregate([
+      {
+        $match: { status: 'collected' }
+      },
+      {
+        $group: {
+          _id: '$collectedBy',
+          totalCollections: { $count: {} }
+        }
+      },
+      { $sort: { totalCollections: -1 } },
+      { $limit: 10 },
+      {
+        $lookup: {
+          from: 'users',
+          localField: '_id',
+          foreignField: '_id',
+          as: 'userDetails'
+        }
+      },
+      {
+        $project: {
+          _id: 1,
+          totalDonations: '$totalCollections',
+          userName: { $arrayElemAt: ['$userDetails.userName', 0] },
+          role: 'volunteer'
+        }
+      }
+    ]);
+
+    res.json({ 
+      success: true, 
+      donors: donorsLeaderboard,
+      volunteers: volunteersLeaderboard
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+});
+
 // Get all donations
 router.get('/', authenticate, async (req, res) => {
   try {
@@ -16,19 +87,21 @@ router.get('/', authenticate, async (req, res) => {
       query.donatedBy = req.user._id;
     }
     const donations = await Donations.find(query)
+      .select('-images')
       .populate('donatedBy', 'userName')
       .populate('collectedBy', 'userName');
 
-    const donationsData = donations.map(donation => {
-      const donationObj = donation.toObject();
-      donationObj.images = (donationObj.images || []).map(img => ({
-        data: img.data ? img.data.toString('base64') : null,
-        contentType: img.contentType
-      }));
-      return donationObj;
-    });
+    // Don't return donation images here
+    // const donationsData = donations.map(donation => {
+    //   const donationObj = donation.toObject();
+    //   donationObj.images = (donationObj.images || []).map(img => ({
+    //     data: img.data ? img.data.toString('base64') : null,
+    //     contentType: img.contentType
+    //   }));
+    //   return donationObj;
+    // });
 
-    res.json({ success: true, donations: donationsData });
+    res.json({ success: true, donations: donations });
   } catch (err) {
     console.error(err);
     res.status(500).json({ success: false, error: 'Server error' });
@@ -41,6 +114,7 @@ router.get('/:donationId', authenticate, async (req, res) => {
     const { donationId } = req.params;
     
     let donation = await Donations.findById(donationId)
+      .select('-images')
       .populate('donatedBy', 'userName')
       .lean();
     
@@ -48,11 +122,12 @@ router.get('/:donationId', authenticate, async (req, res) => {
       return res.status(404).json({ success: false, error: 'Donation not found' });
     }
     
+    // Don't return donation images here
     // Convert image buffers to base64
-    donation.images = donation.images?.map(img => ({
-      data: img.data?.toString('base64'),
-      contentType: img.contentType
-    })) || [];
+    // donation.images = donation.images?.map(img => ({
+    //   data: img.data?.toString('base64'),
+    //   contentType: img.contentType
+    // })) || [];
     
     res.json({ success: true, donation });
   } catch (err) {
@@ -66,24 +141,21 @@ router.get('/:donationId/main_image', authenticate, async (req, res) => {
   try {
     const { donationId } = req.params;
     
-    let donation = await donation.findById(donationId)
-      .select('+images');
+    let donation = await Donations.findById(donationId)
+      .select('+images')
+      .lean();
     
     if (!donation) {
       return res.status(404).json({ success: false, error: 'Donation not found' });
     }
 
-    const numImages = length(donation.images);
+    const numImages = (donation.images || []).length;
+    donation.images = donation.images?.map(img => ({
+      data: img.data?.toString('base64'),
+      contentType: img.contentType
+    })) || [];
     
-    // Convert only the first image buffer to base64
-    donation.images = donation.images?.length
-      ? [{
-          data: donation.images[0].data?.toString('base64'),
-          contentType: donation.images[0].contentType
-        }]
-      : [];
-    
-    res.json({ success: true, image: donation.images, numImages });
+    res.json({ success: true, image: donation.images[0], numImages });
   } catch (err) {
     console.error('Error fetching donation:', err);
     res.status(500).json({ success: false, error: 'Server error' });
@@ -95,8 +167,9 @@ router.get('/:donationId/images', authenticate, async (req, res) => {
   try {
     const { donationId } = req.params;
     
-    let donation = await donation.findById(donationId)
-      .select('+images');
+    let donation = await Donations.findById(donationId)
+      .select('+images')
+      .lean();
     
     if (!donation) {
       return res.status(404).json({ success: false, error: 'Donation not found' });
@@ -170,77 +243,6 @@ router.post('/:donationId/collect', authenticate, async (req, res) => {
     res.json({ success: true, donation });
   } catch (err) {
     console.error('Collection error:', err);
-    res.status(500).json({ success: false, error: 'Server error' });
-  }
-});
-
-// Get donation leaderboard
-router.get('/leaderboard', authenticate, async (req, res) => {
-  try {
-    const donorsLeaderboard = await Donations.aggregate([
-      {
-        $group: {
-          _id: '$donatedBy',
-          totalDonations: { $count: {} }
-        }
-      },
-      { $sort: { totalDonations: -1 } },
-      { $limit: 10 },
-      {
-        $lookup: {
-          from: 'users',
-          localField: '_id',
-          foreignField: '_id',
-          as: 'userDetails'
-        }
-      },
-      {
-        $project: {
-          _id: 1,
-          totalDonations: 1,
-          userName: { $arrayElemAt: ['$userDetails.userName', 0] },
-          role: 'donor'
-        }
-      }
-    ]);
-
-    const volunteersLeaderboard = await Donations.aggregate([
-      {
-        $match: { status: 'collected' }
-      },
-      {
-        $group: {
-          _id: '$collectedBy',
-          totalCollections: { $count: {} }
-        }
-      },
-      { $sort: { totalCollections: -1 } },
-      { $limit: 10 },
-      {
-        $lookup: {
-          from: 'users',
-          localField: '_id',
-          foreignField: '_id',
-          as: 'userDetails'
-        }
-      },
-      {
-        $project: {
-          _id: 1,
-          totalDonations: '$totalCollections',
-          userName: { $arrayElemAt: ['$userDetails.userName', 0] },
-          role: 'volunteer'
-        }
-      }
-    ]);
-
-    res.json({ 
-      success: true, 
-      donors: donorsLeaderboard,
-      volunteers: volunteersLeaderboard
-    });
-  } catch (err) {
-    console.error(err);
     res.status(500).json({ success: false, error: 'Server error' });
   }
 });

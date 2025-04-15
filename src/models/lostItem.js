@@ -23,6 +23,10 @@ const lostItemSchema = new Schema({
     ref: 'User',
     required: true
   },
+  createdAt: {
+    type: Date,
+    default: Date.now
+  },
   status: {
     type: String,
     enum: ['lost', 'found'],

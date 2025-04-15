@@ -1067,20 +1067,20 @@ router.get('/users/:id', async (req, res) => {
     
     // Get user's products
     const products = await Product.find({ seller: userId })
-      .select('name price status createdAt category')
+      .select('-images -offerRequests')
       .sort({ createdAt: -1 })
       .limit(10);
     
     // Get user's purchased products
     const purchasedProducts = await Product.find({ buyer: userId })
-      .select('name price transactionDate category seller')
+      .select('-images -offerRequests')
       .populate('seller', 'userName')
       .sort({ transactionDate: -1 })
       .limit(10);
     
     // Get user's donations
     const donations = await Donation.find({ donatedBy: userId })
-      .select('name donationDate status')
+      .select('-images')
       .sort({ donationDate: -1 })
       .limit(10);
     
