@@ -30,6 +30,14 @@ const ProductSchema = new mongoose.Schema({
     enum: ['available', 'sold', 'closed', 'deleted'],
     default: 'available'
   },
+  createdAt: {
+    type: Date,
+    default: Date.now
+  },
+  lastUpdatedAt: {
+    type: Date,
+    defaul: Date.now
+  },
   seller: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',

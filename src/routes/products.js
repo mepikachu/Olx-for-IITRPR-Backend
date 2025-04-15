@@ -44,17 +44,19 @@ router.get('/', authenticate, async (req, res) => {
     };
 
     let products = await Product.find(filter)
+      .select('-images -offerRequests')
       .populate('seller', 'userName')
       .lean();
 
-    // Convert image buffers to base64
-    products = products.map(product => ({
-      ...product,
-      images: product.images?.map(img => ({
-        data: img.data?.toString('base64'),
-        contentType: img.contentType
-      })) || []
-    }));
+    // No images should be returned so as to save bandwidth
+    // // Convert image buffers to base64
+    // products = products.map(product => ({
+    //   ...product,
+    //   images: product.images?.map(img => ({
+    //     data: img.data?.toString('base64'),
+    //     contentType: img.contentType
+    //   })) || []
+    // }));
 
     res.json({ success: true, products });
   } catch (err) {
@@ -69,18 +71,21 @@ router.get('/:productId', authenticate, async (req, res) => {
     const { productId } = req.params;
     
     let product = await Product.findById(productId)
+      .select('-images -offerRequests')
       .populate('seller', 'userName')
+      .populate('buyer', 'userName')
       .lean();
     
     if (!product || product.status == 'deleted') {
       return res.status(404).json({ success: false, error: 'Product not found' });
     }
     
-    // Convert image buffers to base64
-    product.images = product.images?.map(img => ({
-      data: img.data?.toString('base64'),
-      contentType: img.contentType
-    })) || [];
+    // No images should be returned so as to save bandwidth
+    // // Convert image buffers to base64
+    // product.images = product.images?.map(img => ({
+    //   data: img.data?.toString('base64'),
+    //   contentType: img.contentType
+    // })) || [];
     
     res.json({ success: true, product });
   } catch (err) {
@@ -244,6 +249,7 @@ router.put('/:productId', authenticate, upload.array('images', 5), async (req, r
     product.description = description || product.description;
     product.price = price ? parseFloat(price) : product.price;
     product.images = updatedImages;
+    product.lastUpdatedAt = Date.now;
 
     await product.save();
 

@@ -10,6 +10,10 @@ const DonationsSchema = new mongoose.Schema({
     data: Buffer,
     contentType: String
   }],
+  createdAt: {
+    type: Date,
+    default: Date.now
+  },
   donatedBy: { 
     type: mongoose.Schema.Types.ObjectId, 
     ref: 'User', 
