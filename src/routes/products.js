@@ -107,14 +107,12 @@ router.get('/:productId/main_image', authenticate, async (req, res) => {
     }
 
     const numImages = (product.images || []).length;
-    const mainImage = numImages > 0
-      ? {
-          data: product.images[0].data.toString('base64'),
-          contentType: product.images[0].contentType
-        }
-      : null;
+    product.images = product.images?.map(img => ({
+      data: img.data?.toString('base64'),
+      contentType: img.contentType
+    })) || [];
 
-    res.json({ success: true, image: mainImage, numImages });
+    res.json({ success: true, image: product.images[0], numImages });
   } catch (err) {
     console.error('Error fetching main image:', err);
     res.status(500).json({ success: false, error: 'Server error' });
@@ -152,8 +150,6 @@ router.get('/:productId/images', authenticate, async (req, res) => {
 // Create a new product
 router.post('/', authenticate, upload.array('images', 5), async (req, res) => {
   try {
-    console.log("Received product submission:", req.body);
-    console.log("Files received:", req.files.length);
 
     const images = req.files.map(file => ({
       data: file.buffer,

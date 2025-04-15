@@ -70,24 +70,21 @@ router.get('/:donationId/main_image', authenticate, async (req, res) => {
   try {
     const { donationId } = req.params;
     
-    let donation = await donation.findById(donationId)
-      .select('+images');
+    let donation = await Donations.findById(donationId)
+      .select('+images')
+      .lean();
     
     if (!donation) {
       return res.status(404).json({ success: false, error: 'Donation not found' });
     }
 
-    const numImages = donation.images?.length || 0;
+    const numImages = (donation.images || []).length;
+    donation.images = donation.images?.map(img => ({
+      data: img.data?.toString('base64'),
+      contentType: img.contentType
+    })) || [];
     
-    // Convert only the first image buffer to base64
-    donation.images = donation.images?.length
-      ? [{
-          data: donation.images[0].data?.toString('base64'),
-          contentType: donation.images[0].contentType
-        }]
-      : [];
-    
-    res.json({ success: true, image: donation.images, numImages });
+    res.json({ success: true, image: donation.images[0], numImages });
   } catch (err) {
     console.error('Error fetching donation:', err);
     res.status(500).json({ success: false, error: 'Server error' });
@@ -99,8 +96,9 @@ router.get('/:donationId/images', authenticate, async (req, res) => {
   try {
     const { donationId } = req.params;
     
-    let donation = await donation.findById(donationId)
-      .select('+images');
+    let donation = await Donations.findById(donationId)
+      .select('+images')
+      .lean();
     
     if (!donation) {
       return res.status(404).json({ success: false, error: 'Donation not found' });
