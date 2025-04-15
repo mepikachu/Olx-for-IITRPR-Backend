@@ -1043,7 +1043,7 @@ router.get('/reports/stats', async (req, res) => {
 router.get('/users/', async (req, res) => {
   try {
     const users = await User.find()
-      .select('+profilePicture +userName +email +role +isBlocked');
+      .select('profilePicture userName email role isBlocked');
 
     res.json({ success: true, users });
   } catch (error) {
@@ -1677,8 +1677,10 @@ router.post('/reports/:reportId/resolve/delete-product', async (req, res) => {
     const productSeller = await User.findById(report.product.seller);
     const reporterUser = report.reporter;
     
-    // Delete the product
-    await Product.findByIdAndDelete(report.product._id);
+    // Set the status of the product to deleted
+    const productToDelete = Product.findById(report.product._id);
+    productToDelete.status = 'deleted';
+    productToDelete.save();
     
     // Update report status
     report.status = 'resolved';
@@ -1830,7 +1832,7 @@ router.post('/reports/:reportId/resolve/issue-warning', async (req, res) => {
 });
 
 // Dismiss report without action
-router.post('/reports/:reportId/resolve/dismiss', async (req, res) => {
+router.post('/reports/:reportId/dismiss', async (req, res) => {
   try {
     const { reportId } = req.params;
     const { adminNotes } = req.body;

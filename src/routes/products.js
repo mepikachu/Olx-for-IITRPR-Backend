@@ -72,7 +72,7 @@ router.get('/:productId', authenticate, async (req, res) => {
       .populate('seller', 'userName')
       .lean();
     
-    if (!product) {
+    if (!product || product.status == 'deleted') {
       return res.status(404).json({ success: false, error: 'Product not found' });
     }
     
@@ -89,16 +89,20 @@ router.get('/:productId', authenticate, async (req, res) => {
   }
 });
 
-router.get('/:productId/image', authenticate, async (req, res) => {
+router.get('/:productId/main_image', authenticate, async (req, res) => {
   try {
     const { productId } = req.params;
     
     let product = await Product.findById(productId)
       .select('+images');
-    
-    if (!product) {
+
+    const user = await User.findById(req.user._id);
+
+    if (!product || ((!user || user.role !== 'admin') && product.status == 'deleted')) {
       return res.status(404).json({ success: false, error: 'Product not found' });
     }
+
+    const numImages = length(product.images);
     
     // Convert only the first image buffer to base64
     product.images = product.images?.length
@@ -108,7 +112,33 @@ router.get('/:productId/image', authenticate, async (req, res) => {
         }]
       : [];
     
-    res.json({ success: true, product });
+    res.json({ success: true, image: product.images, numImages });
+  } catch (err) {
+    console.error('Error fetching product:', err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+});
+
+// Get all the images
+router.get('/:productId/images', authenticate, async (req, res) => {
+  try {
+    const { productId } = req.params;
+    
+    let product = await Product.findById(productId)
+      .select('+images');
+
+    const user = await User.findById(req.user._id);
+
+    if (!product || ((!user || user.role !== 'admin') && product.status == 'deleted')) {
+      return res.status(404).json({ success: false, error: 'Product not found' });
+    }
+
+    product.images = product.images?.map(img => ({
+      data: img.data?.toString('base64'),
+      contentType: img.contentType
+    })) || [];
+    
+    res.json({ success: true, images: product.images });
   } catch (err) {
     console.error('Error fetching product:', err);
     res.status(500).json({ success: false, error: 'Server error' });
@@ -164,7 +194,7 @@ router.put('/:productId', authenticate, upload.array('images', 5), async (req, r
     const { description, price, existingImages, clearOffers } = req.body;
 
     const product = await Product.findById(productId);
-    if (!product) {
+    if (!product || product.status == 'deleted') {
       return res.status(404).json({ success: false, error: 'Product not found' });
     }
 
@@ -234,7 +264,7 @@ router.delete('/:productId', authenticate, async (req, res) => {
     const { productId } = req.params;
 
     const product = await Product.findById(productId);
-    if (!product) {
+    if (!product || product.status == 'deleted') {
       return res.status(404).json({ success: false, error: 'Product not found' });
     }
 
@@ -259,7 +289,7 @@ router.delete('/:productId', authenticate, async (req, res) => {
 router.get('/:productId/check-offer', authenticate, async (req, res) => {
   try {
     const product = await Product.findById(req.params.productId);
-    if (!product) {
+    if (!product || product.status == 'deleted') {
       return res.status(404).json({ success: false, error: 'Product not found' });
     }
 
@@ -283,7 +313,7 @@ router.get('/:productId/offers', authenticate, async (req, res) => {
   try {
     const product = await Product.findById(req.params.productId)
       .populate('offerRequests.buyer', 'userName');
-    if (!product) {
+    if (!product || product.status == 'deleted') {
       return res.status(404).json({ success: false, error: 'Product not found' });
     }
     res.json({ success: true, offerRequests: product.offerRequests });
@@ -307,7 +337,7 @@ router.post('/:productId/offers', authenticate, async (req, res) => {
     }
 
     const product = await Product.findById(productId);
-    if (!product) {
+    if (!product || product.status == 'deleted') {
       return res.status(404).json({ 
         success: false, 
         error: 'Product not found' 
@@ -353,7 +383,7 @@ router.post('/offers/:offerId/accept', authenticate, async (req, res) => {
     const { offerId } = req.params;
 
     const product = await Product.findById(productId);
-    if (!product) {
+    if (!product || product.status == 'deleted') {
       return res.status(404).json({ success: false, error: 'Product not found' });
     }
 
@@ -389,7 +419,7 @@ router.post('/offers/:offerId/decline', authenticate, async (req, res) => {
     const { offerId } = req.params;
 
     const product = await Product.findById(productId);
-    if (!product) {
+    if (!product || product.status == 'deleted') {
       return res.status(404).json({ success: false, error: 'Product not found' });
     }
 
@@ -434,7 +464,7 @@ router.post('/offers', authenticate, async (req, res) => {
     }
 
     const product = await Product.findById(productId);
-    if (!product) {
+    if (!product || product.status == 'deleted') {
       return res.status(404).json({ 
         success: false, 
         error: 'Product not found' 

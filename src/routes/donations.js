@@ -61,7 +61,37 @@ router.get('/:donationId', authenticate, async (req, res) => {
   }
 });
 
-router.get('/:donationId/image', authenticate, async (req, res) => {
+// Get the main image
+router.get('/:donationId/main_image', authenticate, async (req, res) => {
+  try {
+    const { donationId } = req.params;
+    
+    let donation = await donation.findById(donationId)
+      .select('+images');
+    
+    if (!donation) {
+      return res.status(404).json({ success: false, error: 'Donation not found' });
+    }
+
+    const numImages = length(donation.images);
+    
+    // Convert only the first image buffer to base64
+    donation.images = donation.images?.length
+      ? [{
+          data: donation.images[0].data?.toString('base64'),
+          contentType: donation.images[0].contentType
+        }]
+      : [];
+    
+    res.json({ success: true, image: donation.images, numImages });
+  } catch (err) {
+    console.error('Error fetching donation:', err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+});
+
+// Get all the images
+router.get('/:donationId/images', authenticate, async (req, res) => {
   try {
     const { donationId } = req.params;
     
@@ -72,15 +102,12 @@ router.get('/:donationId/image', authenticate, async (req, res) => {
       return res.status(404).json({ success: false, error: 'Donation not found' });
     }
     
-    // Convert only the first image buffer to base64
-    donation.images = donation.images?.length
-      ? [{
-          data: donation.images[0].data?.toString('base64'),
-          contentType: donation.images[0].contentType
-        }]
-      : [];
+    donation.images = donation.images?.map(img => ({
+      data: img.data?.toString('base64'),
+      contentType: img.contentType
+    })) || [];
     
-    res.json({ success: true, donation });
+    res.json({ success: true, images: donation.images });
   } catch (err) {
     console.error('Error fetching donation:', err);
     res.status(500).json({ success: false, error: 'Server error' });
