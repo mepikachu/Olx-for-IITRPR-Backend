@@ -41,7 +41,7 @@ router.get('/me', authenticate, async (req, res) => {
       user: {
         ...user.toObject(),
         password: undefined
-      }
+      },
       activity: {
         donations,
         lost_items,
