@@ -2,19 +2,51 @@ const express = require('express');
 const router = express.Router();
 const User = require('../models/user');
 const authenticate = require('../middleware/auth');
+const Donation = require('../models/donation');
+const LostItem = require('../models/lostItem');
+const Product = require('../models/product');
 
 // Get user profile
 router.get('/me', authenticate, async (req, res) => {
   try {
     const user = await User.findById(req.user._id)
-      .populate('soldProducts purchasedProducts')
       .select('-password');
+
+    // my_donations
+    const donations = await Donation.find({ donatedBy: req.user._id })
+      .select('-images')
+      .sort('-createdAt')
+      .lean();
+
+    // my_lost_items
+    const lost_items = await LostItem.find({ user: req.user._id })
+      .select('-images')
+      .sort('-createdAt')
+      .lean();
+
+    // my_listings
+    const products = await Product.find({ seller: req.user._id })
+      .select('-images')
+      .sort('-createdAt')
+      .lean();
+
+    // my_purchases
+    const purchasedProducts = await Product.find({ buyer: req.user._id })
+      .select('-images')
+      .sort('-createdAt')
+      .lean();
 
     res.json({
       success: true,
       user: {
         ...user.toObject(),
         password: undefined
+      }
+      activity: {
+        donations,
+        lost_items,
+        products,
+        purchasedProducts
       }
     });
   } catch (err) {

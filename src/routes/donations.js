@@ -77,15 +77,12 @@ router.get('/leaderboard', authenticate, async (req, res) => {
   }
 });
 
-// Get all donations
+// Get all donations (not for a particular user)
 router.get('/', authenticate, async (req, res) => {
   try {
     let query = {};
-    if (req.user.role === 'volunteer') {
-      query.status = 'available';
-    } else {
-      query.donatedBy = req.user._id;
-    }
+    query.status = 'available';
+
     const donations = await Donations.find(query)
       .select('-images')
       .populate('donatedBy', 'userName')
