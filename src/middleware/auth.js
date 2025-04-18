@@ -2,7 +2,7 @@ const User = require('../models/user');
 
 const authenticate = async (req, res, next) => {
   try {
-    const authCookie = req.cookies?.authCookie || req.headers['auth-cookie'] || req.body.authCookie;
+    const authCookie = req.cookies?.authCookie || req.headers['auth-cookie'] || req.body.authCookie || req.headers['authCookie'];
     if (!authCookie) {
       return res.status(401).json({ 
         success: false, 
