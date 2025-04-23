@@ -48,6 +48,12 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/lost-items', lostItemRoutes);
 
+// Add a basic route to check if server is running
+app.get('/', (req, res) => {
+  res.json({ message: 'Server is running' });
+});
+
+
 // Error handling
 app.use(errorHandler);
 
