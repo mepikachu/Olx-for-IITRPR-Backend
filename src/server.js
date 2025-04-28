@@ -50,7 +50,7 @@ app.use('/api/lost-items', lostItemRoutes);
 
 // Add a basic route to check if server is running
 app.get('/', (req, res) => {
-  res.send('Server is running! sumit bhai chal gaya');
+  res.json('Server is running! sumit bhai chal gaya');
 });
 
 
