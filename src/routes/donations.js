@@ -244,4 +244,26 @@ router.post('/:donationId/collect', authenticate, async (req, res) => {
   }
 });
 
+// Get volunteer's donations
+router.get('/volunteer/donations', authenticate, async (req, res) => {
+  try {
+    if (req.user.role !== 'volunteer') {
+      return res.status(403).json({
+        success: false,
+        error: 'Only volunteers can access this endpoint'
+      });
+    }
+
+    const donations = await Donations.find({ collectedBy: req.user._id })
+      .select('-images')
+      .populate('donatedBy', 'userName')
+      .sort({ createdAt: -1 });
+
+    res.json({ success: true, donations });
+  } catch (err) {
+    console.error('Error fetching volunteer donations:', err);
+    res.status(500).json({ success: false, error: 'Server error' });
+  }
+});
+
 module.exports = router;
