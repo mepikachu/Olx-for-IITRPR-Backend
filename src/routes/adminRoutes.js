@@ -1068,6 +1068,7 @@ router.get('/users/:id', async (req, res) => {
     
     // Get user's products
     const products = await Product.find({ seller: userId })
+      .populate('buyer', 'userName')
       .select('-images -offerRequests')
       .sort({ createdAt: -1 })
       .limit(10)
@@ -1075,6 +1076,7 @@ router.get('/users/:id', async (req, res) => {
     
     // Get user's purchased products
     const purchasedProducts = await Product.find({ buyer: userId })
+      .populate('seller', 'userName')
       .select('-images -offerRequests')
       .populate('seller', 'userName')
       .sort({ transactionDate: -1 })
@@ -1083,6 +1085,7 @@ router.get('/users/:id', async (req, res) => {
     
     // Get user's donations
     const donations = await Donation.find({ donatedBy: userId })
+      .populate('collectedBy', 'userName')
       .select('-images')
       .sort({ donationDate: -1 })
       .limit(10)
@@ -1114,6 +1117,7 @@ router.get('/users/:id', async (req, res) => {
     const reportsAgainst = await UserReport.find({ reportedUser: userId })
       .select('reason reporter createdAt status')
       .populate('reporter', 'userName')
+      .populate('reportedUser', 'userName')
       .sort({ createdAt: -1 })
       .limit(10)
       .lean();

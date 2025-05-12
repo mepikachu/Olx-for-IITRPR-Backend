@@ -14,6 +14,7 @@ router.get('/me', authenticate, async (req, res) => {
 
     // my_donations
     const donations = await Donation.find({ donatedBy: req.user._id })
+      .populate('collectedBy', 'userName')
       .select('-images')
       .sort('-createdAt')
       .lean();
@@ -26,12 +27,14 @@ router.get('/me', authenticate, async (req, res) => {
 
     // my_listings
     const products = await Product.find({ seller: req.user._id })
+      .populate('buyer', 'userName')
       .select('-images')
       .sort('-createdAt')
       .lean();
 
     // my_purchases
     const purchasedProducts = await Product.find({ buyer: req.user._id })
+      .populate('seller', 'userName')
       .select('-images')
       .sort('-createdAt')
       .lean();
@@ -124,7 +127,7 @@ router.get('/profile/:userId', authenticate, async (req, res) => {
 
     // Find the user
     const user = await User.findById(requestedUserId)
-      .select('-email -password -phone -soldProducts -warningIssued -isBlocked -blockedAt -blockedReason -authCookie -authCookieCreated -authCookieExpires');
+      .select('-password -warningIssued -isBlocked -blockedAt -blockedReason -authCookie -authCookieCreated -authCookieExpires');
     
     if (!user) {
       return res.status(404).json({ 
@@ -133,15 +136,44 @@ router.get('/profile/:userId', authenticate, async (req, res) => {
       });
     }
     
-    // Find user's donations
-    const donations = await require('../models/donation').find({ 
-      donatedBy: requestedUserId 
-    });
-    
-    return res.json({
+    const donations = await Donation.find({ donatedBy: req.user._id })
+      .populate('collectedBy', 'userName')
+      .select('-images')
+      .sort('-createdAt')
+      .lean();
+
+    // my_lost_items
+    const lost_items = await LostItem.find({ user: req.user._id })
+      .select('-images')
+      .sort('-createdAt')
+      .lean();
+
+    // my_listings
+    const products = await Product.find({ seller: req.user._id })
+      .populate('buyer', 'userName')
+      .select('-images')
+      .sort('-createdAt')
+      .lean();
+
+    // my_purchases
+    const purchasedProducts = await Product.find({ buyer: req.user._id })
+      .populate('seller', 'userName')
+      .select('-images')
+      .sort('-createdAt')
+      .lean();
+
+    res.json({
       success: true,
-      user: user,
-      donations: donations
+      user: {
+        ...user.toObject(),
+        password: undefined
+      },
+      activity: {
+        donations,
+        lost_items,
+        products,
+        purchasedProducts
+      }
     });
   } catch (err) {
     console.error('Error fetching user profile:', err);
