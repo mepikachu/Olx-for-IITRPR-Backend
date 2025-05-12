@@ -61,39 +61,104 @@ router.put('/me', authenticate, async (req, res) => {
     const { userName, phone, address, profilePicture } = req.body;
     const updateData = {};
 
-    if (userName) updateData.userName = userName;
-    if (phone) updateData.phone = phone;
-    if (address) updateData.address = address; // Remove JSON.parse since it's already an object
+    // Basic validation
+    if (userName !== undefined) {
+      if (userName.trim().length < 2) {
+        return res.status(400).json({ 
+          success: false, 
+          error: 'Username must be at least 2 characters long' 
+        });
+      }
+      updateData.userName = userName.trim();
+    }
 
-    // Handle profile picture if provided
-    if (profilePicture) {
-      updateData.profilePicture = {
-        data: Buffer.from(profilePicture, 'base64'),
-        contentType: 'image/jpeg'
+    if (phone !== undefined) {
+      if (!/^\d{10}$/.test(phone)) {
+        return res.status(400).json({ 
+          success: false, 
+          error: 'Phone number must be 10 digits' 
+        });
+      }
+      updateData.phone = phone;
+    }
+
+    if (address) {
+      updateData.address = {
+        street: address.street || '',
+        city: address.city || '',
+        state: address.state || '',
+        zipCode: address.zipCode || ''
       };
+    }
+
+    // Handle profile picture
+    if (profilePicture && profilePicture.data) {
+      try {
+        // Check if the image data is valid base64
+        const imageBuffer = Buffer.from(profilePicture.data, 'base64');
+        updateData.profilePicture = {
+          data: imageBuffer,
+          contentType: profilePicture.contentType || 'image/jpeg'
+        };
+      } catch (error) {
+        console.error('Profile picture processing error:', error);
+        return res.status(400).json({ 
+          success: false, 
+          error: 'Invalid profile picture format' 
+        });
+      }
+    }
+
+    // Check if there's anything to update
+    if (Object.keys(updateData).length === 0) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'No valid fields to update' 
+      });
     }
 
     const user = await User.findByIdAndUpdate(
       req.user._id,
       { $set: updateData },
-      { new: true, runValidators: true }
-    ).select('-password');
+      { 
+        new: true, 
+        runValidators: true,
+        select: '-password -authCookie -authCookieCreated -authCookieExpires' 
+      }
+    );
+
+    if (!user) {
+      return res.status(404).json({ 
+        success: false, 
+        error: 'User not found' 
+      });
+    }
+
+    // Convert user object to plain object and modify profile picture
+    const userObject = user.toObject();
+    if (userObject.profilePicture && userObject.profilePicture.data) {
+      userObject.profilePicture.data = userObject.profilePicture.data.toString('base64');
+    }
 
     res.json({
       success: true,
       message: 'Profile updated successfully',
-      user
+      user: userObject
     });
+
   } catch (err) {
     console.error('Profile update error:', err);
     if (err.code === 11000) {
       const field = Object.keys(err.keyPattern)[0];
       return res.status(400).json({ 
         success: false, 
-        error: `${field} already exists` 
+        error: `This ${field} is already in use` 
       });
     }
-    res.status(500).json({ success: false, error: err.message });
+    res.status(500).json({ 
+      success: false, 
+      error: 'Failed to update profile. Please try again.' 
+    });
   }
 });
 
