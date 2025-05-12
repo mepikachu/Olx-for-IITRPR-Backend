@@ -61,22 +61,27 @@ router.put('/me', authenticate, async (req, res) => {
     const { userName, phone, address, profilePicture } = req.body;
     const updateData = {};
 
-    // Basic validation
-    if (userName !== undefined) {
-      if (userName.trim().length < 2) {
-        return res.status(400).json({ 
-          success: false, 
-          error: 'Username must be at least 2 characters long' 
+    if (userName) {
+      // Check if username is already taken by another user
+      const existingUser = await User.findOne({ 
+        userName: userName, 
+        _id: { $ne: req.user._id } 
+      });
+      
+      if (existingUser) {
+        return res.status(400).json({
+          success: false,
+          error: 'Username is already taken'
         });
       }
       updateData.userName = userName.trim();
     }
 
-    if (phone !== undefined) {
+    if (phone) {
       if (!/^\d{10}$/.test(phone)) {
-        return res.status(400).json({ 
-          success: false, 
-          error: 'Phone number must be 10 digits' 
+        return res.status(400).json({
+          success: false,
+          error: 'Phone number must be 10 digits'
         });
       }
       updateData.phone = phone;
@@ -91,10 +96,8 @@ router.put('/me', authenticate, async (req, res) => {
       };
     }
 
-    // Handle profile picture
     if (profilePicture && profilePicture.data) {
       try {
-        // Check if the image data is valid base64
         const imageBuffer = Buffer.from(profilePicture.data, 'base64');
         updateData.profilePicture = {
           data: imageBuffer,
@@ -102,62 +105,50 @@ router.put('/me', authenticate, async (req, res) => {
         };
       } catch (error) {
         console.error('Profile picture processing error:', error);
-        return res.status(400).json({ 
-          success: false, 
-          error: 'Invalid profile picture format' 
-        });
       }
     }
 
-    // Check if there's anything to update
-    if (Object.keys(updateData).length === 0) {
-      return res.status(400).json({ 
-        success: false, 
-        error: 'No valid fields to update' 
-      });
-    }
-
-    const user = await User.findByIdAndUpdate(
+    const updatedUser = await User.findByIdAndUpdate(
       req.user._id,
       { $set: updateData },
       { 
-        new: true, 
+        new: true,
         runValidators: true,
-        select: '-password -authCookie -authCookieCreated -authCookieExpires' 
+        select: '-password -authCookie -authCookieCreated -authCookieExpires'
       }
     );
 
-    if (!user) {
-      return res.status(404).json({ 
-        success: false, 
-        error: 'User not found' 
+    if (!updatedUser) {
+      return res.status(404).json({
+        success: false,
+        error: 'User not found'
       });
     }
 
-    // Convert user object to plain object and modify profile picture
-    const userObject = user.toObject();
-    if (userObject.profilePicture && userObject.profilePicture.data) {
+    // Convert profile picture to base64 for response
+    const userObject = updatedUser.toObject();
+    if (userObject.profilePicture?.data) {
       userObject.profilePicture.data = userObject.profilePicture.data.toString('base64');
     }
 
     res.json({
       success: true,
-      message: 'Profile updated successfully',
       user: userObject
     });
 
   } catch (err) {
     console.error('Profile update error:', err);
+    
     if (err.code === 11000) {
-      const field = Object.keys(err.keyPattern)[0];
-      return res.status(400).json({ 
-        success: false, 
-        error: `This ${field} is already in use` 
+      return res.status(400).json({
+        success: false,
+        error: 'Username already exists'
       });
     }
-    res.status(500).json({ 
-      success: false, 
-      error: 'Failed to update profile. Please try again.' 
+
+    res.status(500).json({
+      success: false,
+      error: err.message || 'Failed to update profile'
     });
   }
 });
