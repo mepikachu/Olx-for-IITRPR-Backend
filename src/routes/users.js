@@ -61,95 +61,39 @@ router.put('/me', authenticate, async (req, res) => {
     const { userName, phone, address, profilePicture } = req.body;
     const updateData = {};
 
-    if (userName) {
-      // Check if username is already taken by another user
-      const existingUser = await User.findOne({ 
-        userName: userName, 
-        _id: { $ne: req.user._id } 
-      });
-      
-      if (existingUser) {
-        return res.status(400).json({
-          success: false,
-          error: 'Username is already taken'
-        });
-      }
-      updateData.userName = userName.trim();
-    }
+    if (userName) updateData.userName = userName;
+    if (phone) updateData.phone = phone;
+    if (address) updateData.address = address; // Remove JSON.parse since it's already an object
 
-    if (phone) {
-      if (!/^\d{10}$/.test(phone)) {
-        return res.status(400).json({
-          success: false,
-          error: 'Phone number must be 10 digits'
-        });
-      }
-      updateData.phone = phone;
-    }
-
-    if (address) {
-      updateData.address = {
-        street: address.street || '',
-        city: address.city || '',
-        state: address.state || '',
-        zipCode: address.zipCode || ''
+    // Handle profile picture if provided
+    if (profilePicture) {
+      updateData.profilePicture = {
+        data: Buffer.from(profilePicture, 'base64'),
+        contentType: 'image/jpeg'
       };
     }
 
-    if (profilePicture && profilePicture.data) {
-      try {
-        const imageBuffer = Buffer.from(profilePicture.data, 'base64');
-        updateData.profilePicture = {
-          data: imageBuffer,
-          contentType: profilePicture.contentType || 'image/jpeg'
-        };
-      } catch (error) {
-        console.error('Profile picture processing error:', error);
-      }
-    }
-
-    const updatedUser = await User.findByIdAndUpdate(
+    const user = await User.findByIdAndUpdate(
       req.user._id,
       { $set: updateData },
-      { 
-        new: true,
-        runValidators: true,
-        select: '-password -authCookie -authCookieCreated -authCookieExpires'
-      }
-    );
-
-    if (!updatedUser) {
-      return res.status(404).json({
-        success: false,
-        error: 'User not found'
-      });
-    }
-
-    // Convert profile picture to base64 for response
-    const userObject = updatedUser.toObject();
-    if (userObject.profilePicture?.data) {
-      userObject.profilePicture.data = userObject.profilePicture.data.toString('base64');
-    }
+      { new: true, runValidators: true }
+    ).select('-password');
 
     res.json({
       success: true,
-      user: userObject
+      message: 'Profile updated successfully',
+      user
     });
-
   } catch (err) {
     console.error('Profile update error:', err);
-    
     if (err.code === 11000) {
-      return res.status(400).json({
-        success: false,
-        error: 'Username already exists'
+      const field = Object.keys(err.keyPattern)[0];
+      return res.status(400).json({ 
+        success: false, 
+        error: `${field} already exists` 
       });
     }
-
-    res.status(500).json({
-      success: false,
-      error: err.message || 'Failed to update profile'
-    });
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 

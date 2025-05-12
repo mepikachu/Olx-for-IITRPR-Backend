@@ -8,6 +8,7 @@ const authenticate = require('../middleware/auth');
 const User = require('../models/user');
 const Product = require('../models/product');
 const Donation = require('../models/donation');
+const LostItem = require('../models/lostItem');
 const UserReport = require('../models/UserReport');
 const ProductReport = require('../models/ProductReport')
 const Conversation = require('../models/conversation');
@@ -1069,48 +1070,65 @@ router.get('/users/:id', async (req, res) => {
     const products = await Product.find({ seller: userId })
       .select('-images -offerRequests')
       .sort({ createdAt: -1 })
-      .limit(10);
+      .limit(10)
+      .lean();
     
     // Get user's purchased products
     const purchasedProducts = await Product.find({ buyer: userId })
       .select('-images -offerRequests')
       .populate('seller', 'userName')
       .sort({ transactionDate: -1 })
-      .limit(10);
+      .limit(10)
+      .lean();
     
     // Get user's donations
     const donations = await Donation.find({ donatedBy: userId })
       .select('-images')
       .sort({ donationDate: -1 })
-      .limit(10);
+      .limit(10)
+      .lean();
+
+    // Get user's lost item postings
+    const lostitems = await LostItem.find({ user: userId })
+      .select('-images')
+      .sort({ createdAt: -1 })
+      .limit(10)
+      .lean();
     
     // Get reports filed by this user (both types)
     const userReportsFiled = await UserReport.find({ reporter: userId })
       .select('reason reportedUser createdAt status')
       .populate('reportedUser', 'userName')
       .sort({ createdAt: -1 })
-      .limit(5);
+      .limit(5)
+      .lean();
       
     const productReportsFiled = await ProductReport.find({ reporter: userId })
       .select('reason product createdAt status')
       .populate('product', 'name')
       .sort({ createdAt: -1 })
-      .limit(5);
+      .limit(5)
+      .lean();
     
     // Get reports against this user
     const reportsAgainst = await UserReport.find({ reportedUser: userId })
       .select('reason reporter createdAt status')
       .populate('reporter', 'userName')
       .sort({ createdAt: -1 })
-      .limit(10);
+      .limit(10)
+      .lean();
     
     res.status(200).json({
       success: true,
-      user,
+      user: {
+        ...user.toObject(),
+        password: undefined
+      },
       activity: {
         products,
         purchasedProducts,
         donations,
+	lostitems,
         reportsFiled: {
           user: userReportsFiled,
           product: productReportsFiled

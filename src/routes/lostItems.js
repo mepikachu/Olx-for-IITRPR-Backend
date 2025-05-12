@@ -50,7 +50,11 @@ router.post('/', auth, upload.array('images', 5), async (req, res) => {
 // GET all lost items (no images)
 router.get('/', auth, async (req, res) => {
   try {
-    const items = await LostItem.find()
+    const filter = {
+      user: { $ne: req.user._id } // Exclude lost items where user is seller
+    };
+
+    const items = await LostItem.find(filter)
       .select('-images')
       .populate('user', 'userName email')
       .sort('-createdAt')
