@@ -286,6 +286,29 @@ router.delete('/:productId', authenticate, async (req, res) => {
   }
 });
 
+router.post('/:productId/close', authenticate, async (req, res) => {
+  try {
+    const { productId } = req.params;
+
+    const product = await Product.findById(productId);
+    if (!product || product.status == 'closed' || product.status == 'deleted') {
+      return res.status(404).json({ success: false, error: 'Product not found' });
+    }
+
+    if (product.seller.toString() !== req.user._id.toString()) {
+      return res.status(405).json({ success: false, error: 'Access denied' });
+    }
+
+    product.status = 'closed';
+    await product.save();
+
+    res.json({ success: true, message: 'Product closed successfully' });
+  } catch (err) {
+    console.error('Close product error:', err);
+    res.status(500).json({ success: false, error: 'Server error', message: err.message });
+  }
+});
+
 // Check if user has made an offer
 router.get('/:productId/check-offer', authenticate, async (req, res) => {
   try {

@@ -62,13 +62,12 @@ router.get('/me', authenticate, async (req, res) => {
 router.put('/me', authenticate, async (req, res) => {
   try {
     const { userName, phone, address, profilePicture } = req.body;
-    const updateData = {};
+    const updateData: any = {};
 
     if (userName) updateData.userName = userName;
-    if (phone) updateData.phone = phone;
-    if (address) updateData.address = address; // Remove JSON.parse since it's already an object
+    if (phone)    updateData.phone    = phone;
+    if (address)  updateData.address  = address;
 
-    // Handle profile picture if provided
     if (profilePicture) {
       updateData.profilePicture = {
         data: Buffer.from(profilePicture, 'base64'),
@@ -76,27 +75,45 @@ router.put('/me', authenticate, async (req, res) => {
       };
     }
 
+    // Perform the update, excluding password via projection
     const user = await User.findByIdAndUpdate(
       req.user._id,
       { $set: updateData },
-      { new: true, runValidators: true }
-    ).select('-password');
+      {
+        new: true,
+        runValidators: true,
+        select: '-password'
+      }
+    );
+
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: 'User not found'
+      });
+    }
 
     res.json({
       success: true,
       message: 'Profile updated successfully',
       user
     });
-  } catch (err) {
+  } catch (err: any) {
     console.error('Profile update error:', err);
-    if (err.code === 11000) {
+
+    // Handle duplicate-key (unique) errors
+    if (err.code === 11000 && err.keyPattern) {
       const field = Object.keys(err.keyPattern)[0];
-      return res.status(400).json({ 
-        success: false, 
-        error: `${field} already exists` 
+      return res.status(400).json({
+        success: false,
+        error: `${field} already exists`
       });
     }
-    res.status(500).json({ success: false, error: err.message });
+
+    res.status(500).json({
+      success: false,
+      error: err.message || 'Server error'
+    });
   }
 });
 
