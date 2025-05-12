@@ -61,12 +61,11 @@ router.get('/me', authenticate, async (req, res) => {
 // Update user profile
 router.put('/me', authenticate, async (req, res) => {
   try {
-    const { userName, phone, address, profilePicture } = req.body;
-    const updateData: any = {};
+    const { userName, phone, profilePicture } = req.body;
+    const updateData = {};
 
     if (userName) updateData.userName = userName;
     if (phone)    updateData.phone    = phone;
-    if (address)  updateData.address  = address;
 
     if (profilePicture) {
       updateData.profilePicture = {
