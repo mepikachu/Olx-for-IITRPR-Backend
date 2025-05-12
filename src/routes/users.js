@@ -97,7 +97,7 @@ router.put('/me', authenticate, async (req, res) => {
       message: 'Profile updated successfully',
       user
     });
-  } catch (err: any) {
+  } catch (err) {
     console.error('Profile update error:', err);
 
     // Handle duplicate-key (unique) errors
