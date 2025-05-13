@@ -1069,6 +1069,7 @@ router.get('/users/:id', async (req, res) => {
     // Get user's products
     const products = await Product.find({ seller: userId })
       .populate('buyer', 'userName')
+      .populate('seller', 'userName')
       .select('-images -offerRequests')
       .sort({ createdAt: -1 })
       .limit(10)
@@ -1076,6 +1077,7 @@ router.get('/users/:id', async (req, res) => {
     
     // Get user's purchased products
     const purchasedProducts = await Product.find({ buyer: userId })
+      .populate('buyer', 'userName')
       .populate('seller', 'userName')
       .select('-images -offerRequests')
       .populate('seller', 'userName')
@@ -1092,7 +1094,7 @@ router.get('/users/:id', async (req, res) => {
       .lean();
 
     // Get user's lost item postings
-    const lostitems = await LostItem.find({ user: userId })
+    const lost_items = await LostItem.find({ user: userId })
       .select('-images')
       .sort({ createdAt: -1 })
       .limit(10)
@@ -1132,7 +1134,7 @@ router.get('/users/:id', async (req, res) => {
         products,
         purchasedProducts,
         donations,
-	lostitems,
+	      lost_items,
         reportsFiled: {
           user: userReportsFiled,
           product: productReportsFiled
@@ -1542,6 +1544,133 @@ router.get('/reports/:reportId', async (req, res) => {
     });
   } catch (error) {
     console.error('Get report details error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Server error: ' + error.message
+    });
+  }
+});
+
+// Block user directly (without requiring a report)
+router.post('/users/:userId/block', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    const { reason } = req.body;
+    
+    if (!reason) {
+      return res.status(400).json({
+        success: false,
+        message: 'Block reason is required'
+      });
+    }
+    
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid user ID format'
+      });
+    }
+    
+    // Find the user to block
+    const user = await User.findById(userId);
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+    
+    // Block user
+    user.isBlocked = true;
+    user.blockedAt = new Date();
+    user.blockedReason = reason;
+    await user.save();
+    
+    // Create notification for the blocked user
+    const notification = new Notification({
+      userId: user._id,
+      type: 'user_blocked',
+      message: `Your account has been blocked. Reason: ${reason}`,
+      read: false
+    });
+    await notification.save();
+    
+    return res.status(200).json({
+      success: true,
+      message: 'User blocked successfully',
+      user: {
+        _id: user._id,
+        userName: user.userName,
+        email: user.email,
+        isBlocked: user.isBlocked
+      }
+    });
+  } catch (error) {
+    console.error('Direct block user error:', error);
+    return res.status(500).json({
+      success: false,
+      message: 'Server error: ' + error.message
+    });
+  }
+});
+
+// Unblock user directly
+router.post('/users/:userId/unblock', async (req, res) => {
+  try {
+    const { userId } = req.params;
+    
+    if (!mongoose.Types.ObjectId.isValid(userId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid user ID format'
+      });
+    }
+    
+    // Find the user to unblock
+    const user = await User.findById(userId);
+    
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+    
+    // Check if user is actually blocked
+    if (!user.isBlocked) {
+      return res.status(400).json({
+        success: false,
+        message: 'User is not blocked'
+      });
+    }
+    
+    // Unblock user
+    user.isBlocked = false;
+    user.blockedReason = undefined; // Clear the reason
+    await user.save();
+    
+    // Create notification for the unblocked user
+    const notification = new Notification({
+      userId: user._id,
+      type: 'user_unblocked',
+      message: 'Your account has been unblocked. You can now use all platform features.',
+      read: false
+    });
+    await notification.save();
+    
+    return res.status(200).json({
+      success: true,
+      message: 'User unblocked successfully',
+      user: {
+        _id: user._id,
+        userName: user.userName,
+        email: user.email,
+        isBlocked: false
+      }
+    });
+  } catch (error) {
+    console.error('Direct unblock user error:', error);
     return res.status(500).json({
       success: false,
       message: 'Server error: ' + error.message
