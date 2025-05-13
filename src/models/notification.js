@@ -19,6 +19,7 @@ const notificationSchema = new mongoose.Schema({
       'offer_received',
       'report_reviewed',
       'user_blocked',
+      'user_unblocked',
       'product_deleted', 
       'warnings_received'
     ],
