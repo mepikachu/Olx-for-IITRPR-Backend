@@ -61,58 +61,43 @@ router.get('/me', authenticate, async (req, res) => {
 // Update user profile
 router.put('/me', authenticate, async (req, res) => {
   try {
-    const { userName, phone, profilePicture } = req.body;
-    const updateData = {};
+    const { userName, phone, address, profilePicture } = req.body;
 
-    if (userName) updateData.userName = userName;
-    if (phone)    updateData.phone    = phone;
+    // 1) Find the user document
+    const user = await User.findById(req.user._id);
+    if (!user) {
+      return res.status(404).json({ success: false, error: 'User not found' });
+    }
 
+    // 2) Mutate only the fields the client sent
+    if (userName)       user.userName        = userName;
+    if (phone)          user.phone           = phone;
+    if (address)        user.address         = address;
     if (profilePicture) {
-      updateData.profilePicture = {
+      user.profilePicture = {
         data: Buffer.from(profilePicture, 'base64'),
         contentType: 'image/jpeg'
       };
     }
 
-    // Perform the update, excluding password via projection
-    const user = await User.findByIdAndUpdate(
-      req.user._id,
-      { $set: updateData },
-      {
-        new: true,
-        runValidators: true,
-        select: '-password'
-      }
-    );
+    await user.save();
 
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        error: 'User not found'
-      });
-    }
+    // 4) Remove sensitive data before sending
+    const result = user.toObject();
+    delete result.password;
 
     res.json({
       success: true,
       message: 'Profile updated successfully',
-      user
+      user: result
     });
   } catch (err) {
     console.error('Profile update error:', err);
-
-    // Handle duplicate-key (unique) errors
     if (err.code === 11000 && err.keyPattern) {
       const field = Object.keys(err.keyPattern)[0];
-      return res.status(400).json({
-        success: false,
-        error: `${field} already exists`
-      });
+      return res.status(400).json({ success: false, error: `${field} already exists` });
     }
-
-    res.status(500).json({
-      success: false,
-      error: err.message || 'Server error'
-    });
+    res.status(500).json({ success: false, error: err.message });
   }
 });
 
