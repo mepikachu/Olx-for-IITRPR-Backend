@@ -137,31 +137,27 @@ router.get('/profile/:userId', authenticate, async (req, res) => {
       });
     }
     
-    const donations = await Donation.find({ donatedBy: req.user._id })
+    const donations = await Donation.find({ donatedBy: requestedUserId })
       .populate('collectedBy', 'userName')
       .select('-images')
       .sort('-createdAt')
       .lean();
 
     // my_lost_items
-    const lost_items = await LostItem.find({ user: req.user._id })
+    const lost_items = await LostItem.find({ user: requestedUserId })
       .select('-images')
       .sort('-createdAt')
       .lean();
 
     // my_listings
-    const products = await Product.find({ seller: req.user._id })
+    const products = await Product.find({ seller: requestedUserId })
       .populate('buyer', 'userName')
       .select('-images')
       .sort('-createdAt')
       .lean();
 
     // my_purchases
-    const purchasedProducts = await Product.find({ buyer: req.user._id })
-      .populate('seller', 'userName')
-      .select('-images')
-      .sort('-createdAt')
-      .lean();
+    const purchasedProducts = []; // return empty for security and privacy purposes
 
     res.json({
       success: true,
