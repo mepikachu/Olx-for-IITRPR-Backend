@@ -3,24 +3,56 @@ const router = express.Router();
 const Notification = require('../models/notification');
 const authenticate = require('../middleware/auth');
 
-// Get all notifications for a user
-router.get('/user/notifications', authenticate, async (req, res) => {
+// Get all notifications
+router.get('/', authenticate, async (req, res) => {
   try {
     const notifications = await Notification.find({ 
       userId: req.user._id 
     })
     .sort({ createdAt: -1 })
-    .lean();
+    .populate('productId', 'name status')  // Add this line to populate product details
+    .populate('offerId', '_id status')     // Add this line to populate offer details
+    .lean();  // Convert to plain JavaScript objects
 
     res.json({ 
       success: true, 
-      notifications 
+      notifications: notifications.map(notification => ({
+        ...notification,
+        read: notification.read || false,  // Ensure read status is included
+      }))
     });
   } catch (err) {
     console.error('Error fetching notifications:', err);
     res.status(500).json({ 
       success: false, 
       error: 'Failed to fetch notifications' 
+    });
+  }
+});
+
+// Get notifications after a specific ID
+router.get('/after/:notificationId', authenticate, async (req, res) => {
+  try {
+    const notifications = await Notification.find({
+      userId: req.user._id,
+      _id: { $gt: req.params.notificationId }
+    })
+    .sort({ createdAt: -1 })
+    .populate('productId', 'name status')
+    .populate('offerId', '_id status')
+    .lean();
+
+    res.json({ 
+      success: true, 
+      notifications: notifications.map(notification => ({
+        ...notification,
+        read: notification.read || false,
+      }))
+    });
+  } catch (err) {
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch new notifications'
     });
   }
 });
